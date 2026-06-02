@@ -5,8 +5,8 @@
 
 add IJulia;
 
-add CellBasedModels;
+add https://github.com/dsb-lab/CellBasedModels.jl;
 
-add DifferentialEquations, Distributions, Random, GLMakie, Printf, Dates, Glob, NBInclude, MathTeXEngine
+add DifferentialEquations, Distributions, Random, GLMakie, Printf, Dates, Glob, NBInclude, MathTeXEngine;
 
-Pkg.add(["CSV", "WriteVTK", "DataFrames", "Distances", "Clustering", "GeometryBasics", "Colors", "StaticArrays"])
+add CSV, WriteVTK, DataFrames, Distances, Clustering, GeometryBasics, Colors, StaticArrays;
