@@ -491,9 +491,9 @@ The Oct 7 set is kept as `PSETS["final_oct7"]`, with its figures in `code-claude
 | 6 | 600 | 714–2400 | none up to 2400 (4800 not run) |
 | 7 | 849 | | (one point) |
 | 8, 12 | 1009 | 1200–2400 | none up to 2400 |
-| unconfined | 600 | 849 (mixed: 2 other, 1 central)–2400 | none up to 2400 (N0 4800 still running at the commit) |
+| unconfined | 600 | 849 (mixed: 2 other, 1 central)–4800 | none up to 4800 (N0 4800: central, S 0.81, B offset 0.01) |
 
-Seeds: 2 per point, 3 at the points next to a threshold, 1 at N0 4800; 177 runs in all.
+Seeds: 2 per point, 3 at the points next to a threshold, 1 at N0 4800; 178 runs in all.
 
 - **The three regions of your sketch, with patterns at 1–4 layers.**
   - The pattern threshold rises steeply with thickness.

@@ -201,7 +201,7 @@ The Oct 7 set (`figures-oct7/`) used 3 seeds, 5 at the smallest points, and thre
   - the run file
 
 **The "free" row** at the top of the chart is the same mechanics without plates:
-- unconfined runs at the grid N0 values from 150 up, 2 seeds each (`free.csv`)
+- unconfined runs at the grid N0 values from 150 up, 2 seeds each (3 at N0 849 and 1200, 1 at 4800; `free.csv`)
 - what a gap much wider than the aggregate tends to
 
 **Four versions** (Oct 8). `replot_figures` draws every phase-space folder four times, with the same runs,

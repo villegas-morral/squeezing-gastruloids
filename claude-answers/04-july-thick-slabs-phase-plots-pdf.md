@@ -20,7 +20,7 @@ figure is made in [reports/FIGURES.md](../reports/FIGURES.md).*
 4. **The presentation PDF** follows your sketch (A model, B no / medium / strong confinement over time,
    C phase space), in your colours: `code-claude/figures/presentation.pdf`.
 
-**The new phase space** (177 runs, 2–3 seeds per point) has your three regions, now with patterns at 1–4
+**The new phase space** (178 runs, 2–3 seeds per point) has your three regions, now with patterns at 1–4
 layers:
 
 | layers | polarised up to N0 | central cluster | patterns from N0 |
@@ -30,7 +30,7 @@ layers:
 | 3 | 150–178 | 212–1200 | ≈ 1300 |
 | 4 | 212 | 300–3394 | between 3394 and 4800 |
 | 6–12 | 600–1000 | above that, up to 2400 | none up to 2400 |
-| unconfined | 600 | 849–2400 | none up to 2400 |
+| unconfined | 600 | 849–4800 | none up to 4800 |
 
 **The diameter plots (task 3) show why the threshold rises so steeply.** Over 1–4 layers the pattern
 threshold spans N0 ≈ 170–4000, a factor of 25, but only about 8–17 cell diameters in pancake width
@@ -258,15 +258,19 @@ The page layout (positions in points on the A4 page) is the last block of that s
     if you want to change it.
 
   ![3 layers N0 1427, an opening cluster](img/04-opening-cluster.png)
-- **Big unconfined aggregates** (N0 1200, 2400) still neither pattern nor polarise by the readout. In your
-  sketch they pattern beyond log N0 ≈ 3.1. In this model a big free aggregate polarises only late (N0 849 does by fB 0.12) and does not break up: a free core can always round up. An unconfined N0 4800 run was still going at the time of the commit (see the end of this file).
+- **Big unconfined aggregates** (N0 1200, 2400, 4800) neither pattern nor polarise by the readout: N0 4800 is
+  still one compact central blob (S 0.81, B offset 0.01). In your sketch they pattern beyond log N0 ≈ 3.1.
+  In this model a big free aggregate polarises only late (N0 849 does by fB 0.12), and it does not break up,
+  since a free core can always round up. This is the one part of your sketch the model does not give.
 - **The monolayer islands are a little looser** than the Oct 7 ones (S ≈ 0.41 against 0.44–0.49 at N0 2400).
   You said "a little bit more loose would also be ok". By eye they are closer to the experimental examples:
   many small irregular domains.
-- **Nothing is pushed.** Local commits on `dev`:
-  - the July reorganisation
-  - everything else from Oct 6–8, about 120 MB of new files: both sets' figures (60 MB), the July figures
-    (18 MB), the answers' images (31 MB) and your notes
+- **Nothing is pushed.** Local commits on `dev`, on top of the merge of your July commit:
+  - `5d10d07`: the July reorganisation
+  - `a1373b6`: everything else from Oct 6–8, about 120 MB of new files: both sets' figures (60 MB), the July
+    figures (18 MB), the answers' images (31 MB) and your notes
+  - `c87e0bb`: a third seed at the thresholds, with the figures redrawn
+  - the last one: the unconfined N0 4800 run added
 
   The runs in `code-claude/results/` stay ignored.
 
