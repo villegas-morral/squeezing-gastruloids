@@ -5,7 +5,7 @@
 # notebook and re-export with scripts/export_lib.ps1 so the two cannot drift.
 #
 # Usage:
-#   using Random, Statistics, Printf, Distributions, ProgressMeter
+#   using Random, Statistics, Printf, Distributions, ProgressMeter, DelimitedFiles
 #   using CellBasedModels; import CellBasedModels: update!
 #   using JLD2, CairoMakie
 #   include("gastruloids_lib.jl")
@@ -42,7 +42,12 @@ function initialize_growth(parameters; dt, simBox = [-60.0 60; -60 60; -60 60])
 	end
 
 	# Initialization
-	com.cell_state = 1
+	# The aggregate grows as C cells; initialize_diff! seeds the B core later.
+	# (The original grew type 1 = A, which no longer exists. The growth mechanics,
+	# parameters_tfm, are the same for every type, so this only matters for the
+	# relaxation right after switching to parameters_do: it now runs under CC
+	# mechanics, the tissue that surrounds the core.)
+	com.cell_state = 3
 	com.x = 0.0
 	com.y = 0.0
 	com.z = 0.0
@@ -58,30 +63,7 @@ function initialize_growth(parameters; dt, simBox = [-60.0 60; -60 60; -60 60])
 
 end;
 
-
 # ---- notebook cell f2f50d7d ----------------------------------------------------
-"""
-	push_fA!(com)
-
-Refresh the model parameter `:fA` with the live fraction of A cells.
-
-`agentRule` reads the global A fraction as `ni_a = fA`. It cannot compute it
-itself: a `com.cell_state` inside the rule is resolved as a global lookup in
-`Main`, not as the community being stepped. Call this once per step, before
-`agentStepRule!`. Model parameters can be written while the community is loaded
-on the platform, so this works inside the stepping loops.
-"""
-@inline function push_fA!(com)
-	n = com.N[1]
-	cs = com.cell_state
-	nA = 0
-	@inbounds for i in 1:n
-		cs[i] == 1 && (nA += 1)
-	end
-	com.parameters[:fA][1] = nA / n
-	return nothing
-end;
-
 function grow_size!(com, save_each, n_cells;
 	n_control=100, show_progress = true)
 
@@ -97,7 +79,6 @@ function grow_size!(com, save_each, n_cells;
 			n_total += n_control
 		end
 		i += 1
-		push_fA!(com)
 		agentStepDE!(com)
 		agentStepRule!(com)
 		update!(com)
@@ -115,46 +96,88 @@ function grow_size!(com, save_each, n_cells;
 	bringFromPlatform!(com)
 end;
 
-
 # ---- notebook cell f818a62d ----------------------------------------------------
-function initialize_diff!(com; 
+"""
+	initialize_diff!(com; g_on = true, t_reset = true, fB = 0.6, width = 0.0, f_in = nothing,
+	                 confined = true, c_core = 0.0)
+
+Seed the B core and switch differentiation on.
+
+* `fB`        fraction of ALL cells that start as B (meeting: about 60 %). Exactly
+              round(fB * N) cells become B: the innermost ones.
+* `width`     0 = sharp core: the innermost cells are B and all the others C.
+              width > 0 dilutes the edge: a cell at distance rho from the centre
+              (in units of the aggregate radius) is B with probability
+              1 / (1 + exp((rho - rho0) / width)), with rho0 such that exactly
+              round(fB * N) cells are still B. 0.05 is a soft edge, 0.2 a strong
+              dilution.
+* `f_in`      another way to ask for the same dilution: the fraction of the B
+              cells that stay inside the sharp core (the round(fB * N) innermost
+              cells). 1 = sharp; 0.75 = a quarter of the B cells outside it, the
+              rest of the core C (meeting, Oct 2026). The width that gives it is
+              found by bisection; `width` is then ignored.
+* `confined`  true: rho is the IN-PLANE distance, so the core is a cylinder
+              through the whole slab (squeezing a sphere that has a core gives a
+              core spanning the thickness). false: the 3D distance, a spherical core.
+* `c_core`    fraction of the core left C, mixed in at random (the July seeding: 75 %
+              B + 15 % A + 10 % C shuffled inside the core). The core is then the
+              round(fB * N / (1 - c_core)) innermost cells, so exactly round(fB * N)
+              are still B. 0 = a pure B core.
+
+The aggregate radius is the 98th percentile of rho, so a few stray cells cannot
+inflate it. Returns the width used.
+"""
+function initialize_diff!(com;
     g_on = true,
     t_reset = true,
-    center = 0.8,
-    b0 = 0.75,
-    a0 = 0.15,
-    cluster = true
+    fB = 0.6,
+    width = 0.0,
+    f_in = nothing,
+    confined = true,
+    c_core = 0.0
     )
 
-    if cluster
-        # The A,B core is selected as a CYLINDER centred on the aggregate, not
-        # as a sphere centred on the origin. Two reasons:
-        #  * a confined aggregate sits at z ~ L/2, not at z = 0, so a sphere
-        #    x^2+y^2+z^2 < (center*r_agg)^2 sits BELOW the tissue. At layers=4,
-        #    N0=100 it seeded only 14% of the cells, all of them squashed
-        #    against the bottom plate;
-        #  * the experiment squeezes a sphere that already has a central core,
-        #    so the core should span the FULL thickness of the pancake, which
-        #    is what a cylinder gives.
-        # r_agg is measured from the cells rather than passed in, and the 98th
-        # percentile is used so a few stray cells cannot inflate it.
-        xc, yc = mean(com.x), mean(com.y)
+    # distance of every cell from the aggregate centre, in units of its radius
+    xc, yc, zc = mean(com.x), mean(com.y), mean(com.z)
+    if confined
         rho = sqrt.((com.x .- xc).^2 .+ (com.y .- yc).^2)
-        r_agg = quantile(rho, 0.98)
-
-        com.cell_state .= 3
-        r_center_2 = (center * r_agg)^2
-        central_indices = findall(i -> (com.x[i]-xc)^2 + (com.y[i]-yc)^2 < r_center_2, eachindex(com.x))
-        if !isempty(central_indices)
-            shuffle!(central_indices)
-            n_center = length(central_indices)
-            n_b = round(Int, b0 * n_center)
-            n_a = round(Int, a0 * n_center)
-            com.cell_state[central_indices[1:n_b]] .= 2
-            com.cell_state[central_indices[n_b+1:minimum([n_b+1+n_a, n_center])]] .= 1
-        end
+    else
+        rho = sqrt.((com.x .- xc).^2 .+ (com.y .- yc).^2 .+ (com.z .- zc).^2)
     end
-    
+    rho = rho ./ quantile(rho, 0.98)
+    n_B = round(Int, fB * length(rho))
+
+    # The n_B cells with the smallest score become B. With width > 0 the score is
+    # the radius blurred by logistic noise: that turns the sharp cut into the
+    # smooth profile above while keeping exactly n_B cells B.
+    score = copy(rho)
+    if (f_in !== nothing && f_in < 1) || width > 0
+        u = rand(length(rho))
+        noise = log.(u ./ (1 .- u))
+        if f_in !== nothing && f_in < 1
+            core = falses(length(rho))
+            core[sortperm(rho)[1:n_B]] .= true
+            inside(w) = count(core[sortperm(rho .+ w .* noise)[1:n_B]]) / n_B
+            lo, hi = 0.0, 0.1
+            while inside(hi) > f_in; hi *= 2; end
+            for _ in 1:30
+                mid = (lo + hi) / 2
+                inside(mid) > f_in ? (lo = mid) : (hi = mid)
+            end
+            width = hi
+        end
+        score .+= width .* noise
+    end
+    com.cell_state .= 3
+    com.cell_state[sortperm(score)[1:n_B]] .= 2
+
+    # C cells mixed into the core (salt and pepper inside it), as seeded in July
+    if c_core > 0
+        core = sortperm(score)[1:min(length(score), round(Int, n_B / (1 - c_core)))]
+        com.cell_state .= 3
+        com.cell_state[shuffle(core)[1:n_B]] .= 2
+    end
+
     dt = com.dt
 	com.g_on = g_on
     com.d_on = true
@@ -169,72 +192,96 @@ function initialize_diff!(com;
             com.t_div[i] = com.t + CBMDistributions.uniform(dt, sample_right)
         end
     end
-    
+
 	saveRAM!(com)
 
+    return width
 end;
 
 # ---- notebook cell 9154a7b7 ----------------------------------------------------
+"Fraction of B cells (cell_state == 2) among the current cells. Works while loaded on the platform."
+function fraction_B(com)
+	n = com.N[1]
+	cs = com.cell_state
+	nB = 0
+	@inbounds for i in 1:n
+		cs[i] == 2 && (nB += 1)
+	end
+	return nB / n
+end;
+
+"""
+	differentiate!(com, save_each, tf; fB_stop = nothing, show_progress = true, ...)
+
+Proliferate and differentiate (B -> C) for a time `tf`, saving a frame every
+`save_each` steps. By default the whole `tf` runs. With `fB_stop` set, the run
+stops at the first saved frame where the fraction of B cells is <= fB_stop
+(handy in sweeps; 0.2 is the experimental 96 h reference).
+"""
 function differentiate!(com, save_each, tf;
     preallocate = 2 * com.N * 2 ^ (tf / minimum(com.tau_div)),
+    fB_stop = nothing,
     show_progress = true      # false in batch runs: skips the inline plot
     )
 
 	com.abm.neighbors.cellEdge = (2 * maximum(com.r)) * maximum(com.mu)
 
-    message1 = "Possible numerical instabilities. 
+    message1 = "Possible numerical instabilities.
             You might have to send argument preallocate = highnumber
             Default is preallocate = 2 * com.N * 2 ^ (tf / minimum(com.tau_div))"
-    message2 = "Numerical instabilities. 
+    message2 = "Numerical instabilities.
             You might have to decrease the timestep"
 
 	steps = round(Int64, tf / com.dt)
     step_control = steps / 10
     progress = step_control
-    
+    i_end = steps
+
     if com.g_on[]
         show_progress && println("Initial N: $(com.N)")
         loadToPlatform!(com, preallocateAgents = round(Int, preallocate))
     else
         loadToPlatform!(com)
     end
-    
+
     for i in 1:steps
 		if i > progress
             if show_progress
                 IJulia.clear_output(true)
-			    println("$(round(100 * i / steps))% \t N=$(com.N)")
+			    println("$(round(100 * i / steps))% \t N=$(com.N) \t fB=$(round(fraction_B(com), digits = 3))")
                 plot_pancake(com, color_map_alpha, length(com), length(com); savefig=false, n_views=1, n=1)
             end
 			progress += step_control
 		end
-        push_fA!(com)
         agentStepDE!(com)
         agentStepRule!(com)
         update!(com)
         computeNeighbors!(com)
         if i % save_each == 0
             saveRAM!(com)
+            if fB_stop !== nothing && fraction_B(com) <= fB_stop
+                i_end = i
+                break
+            end
         end
         if all(com.N .> preallocate)
             println(message1)
             break
         end
-    end        
+    end
 
-	if steps % save_each != 0
+	if i_end % save_each != 0
 		saveRAM!(com)
     end
-    
+
 	bringFromPlatform!(com)
-    
+
     if show_progress
         IJulia.clear_output(true)
-        println("Final N: $(com.N)")
+        println("Final N: $(com.N) \t fB: $(round(fraction_B(com), digits = 3))")
     end
-    
-end;
 
+end;
 
 # ---- notebook cell f06d6c5e ----------------------------------------------------
 function stabilize!(com, save_each, tf; show_progress = true)
@@ -563,6 +610,504 @@ function plot_pancake_frames(d, color_map, ks;
 	fig
 end;
 
+# ---- notebook cell 6b8e0c35 ----------------------------------------------------
+# --- 3D gallery: several runs and/or frames side by side ----------------------------
+
+"""
+	plot_gallery(panels; ncol = length(panels), views = (:top, :side), cut_top = true,
+	             size_ratio = 0.7, labelsize = 22, title = nothing,
+	             filename = "gallery", savefig = false)
+
+3D panels in the plot_pancake look (Axis3 + meshscatter, C drawn first), for
+several runs and/or frames at once. `panels` is a vector of NamedTuples
+(d, k, label): d from load_frames, k the frame to draw, label the panel title.
+Each panel gets one row per entry of `views`:
+
+	:top    seen from above; with cut_top the cells above the mid-plane are
+	        dropped (a cutaway), otherwise the C roof hides the B cells
+	:side   seen from the side, all cells (shows the slab thickness)
+"""
+function plot_gallery(panels; ncol = length(panels), views = (:top, :side), cut_top = true,
+		size_ratio = 0.7, labelsize = 22, title = nothing,
+		filename = "gallery", savefig = false)
+	nv = length(views)
+	nrow = cld(length(panels), ncol)
+	toff = title === nothing ? 0 : 1
+	fig = Figure(size = (round(Int, 520*size_ratio*ncol),
+						 round(Int, 470*size_ratio*nv*nrow) + 70*toff), figure_padding = 20)
+	title === nothing || Label(fig[1, 1:ncol], title; fontsize = labelsize + 6, font = :bold)
+	for (p, pan) in enumerate(panels)
+		rb, cc = divrem(p - 1, ncol)
+		x, y, z, r, s = pan.d.x[pan.k], pan.d.y[pan.k], pan.d.z[pan.k], pan.d.r[pan.k], pan.d.cell_state[pan.k]
+		xc, yc, zc = mean(x), mean(y), mean(z)
+		bs = max(maximum(x) - minimum(x), maximum(y) - minimum(y)) / 2 + 2.0   # + margin: cells are not clipped
+		for (jv, v) in enumerate(views)
+			keep = (v == :top && cut_top) ? findall(w -> w <= zc + 0.2, z) : collect(eachindex(z))
+			ax = Axis3(fig[toff + rb*nv + jv, cc + 1], aspect = :data, azimuth = 0,
+				elevation = v == :top ? pi/2 : 2*pi + pi/32,
+				xlabel = "", ylabel = "", zlabel = "",
+				xgridvisible = false, ygridvisible = false, zgridvisible = false,
+				xspinesvisible = false, yspinesvisible = false, zspinesvisible = false,
+				xticksvisible = false, yticksvisible = false, zticksvisible = false,
+				xticklabelsvisible = false, yticklabelsvisible = false, zticklabelsvisible = false,
+				titlevisible = jv == 1, title = pan.label, titlesize = labelsize, titlegap = 4)
+			o = sort(keep; by = m -> s[m], rev = true)     # draw C first
+			meshscatter!(ax, x[o] .- xc, y[o] .- yc, z[o] .- zc;
+				markersize = r[o], color = [color_map[s[m]] for m in o])
+			xlims!(ax, -bs, bs); ylims!(ax, -bs, bs); zlims!(ax, -bs, bs)
+		end
+	end
+	title === nothing || rowgap!(fig.layout, 1, 60)     # room between the title and the panel labels
+	savefig && save("$(filename).png", fig)
+	fig
+end;
+
+# ---- notebook cell a7f3c2d1 ----------------------------------------------------
+# --- final figures: 3D panels, the data behind them, the phase space, movies -------
+#
+# Every final figure can be redrawn from code-claude/figures/data alone, without
+# re-running anything (replot_figures). Per figure, data/<figure>/ holds
+#
+#   title.txt       the figure title
+#   panels.tsv      one row per panel: panel, row, col, views, label, file
+#                   (tab-separated; "|" in a label is a line break)
+#   <panel>.csv     one row per cell: x, y, z, r, cell_state -- the frame shown
+#   <panel>.jld2    the same arrays plus where they come from (meta: run, frame, t, fB)
+#
+# and the phase space has data/phase_space/phase_space.csv (one row per run) plus
+# its insets in panels.tsv, where the row and col columns hold the layers and N0 of
+# the run the inset comes from. reports/FIGURES.md says how each figure was made.
+
+PHASE_COLORS = Dict(                   # outcome classes of the phase space
+	"CENTRAL"   => Makie.to_color("#2a78d6"),  # blue
+	"PATTERN"   => Makie.to_color("#1baf7a"),  # aqua (ring or islands)
+	"POLARISED" => Makie.to_color("#eb6834"),  # orange
+	"OTHER"     => Makie.to_color("#b4b2ab"),  # grey
+);
+
+"The phase-space class of a classify_pattern outcome: rings and islands are both PATTERN."
+phase_class(c) = c in ("RING", "ISLANDS") ? "PATTERN" : c in ("CENTRAL", "POLARISED") ? c : "OTHER";
+
+"""
+	save_panel(dir, panel, x, y, z, r, s; meta...)
+
+Write the cells of one 3D panel as <panel>.csv (x, y, z, r, cell_state) and
+<panel>.jld2 (the same arrays plus `meta`, e.g. run = file, frame = k, t, fB).
+"""
+function save_panel(dir, panel, x, y, z, r, s; meta...)
+	mkpath(dir)
+	open(joinpath(dir, "$(panel).csv"), "w") do io
+		println(io, "x,y,z,r,cell_state")
+		for i in eachindex(x)
+			@printf(io, "%.4f,%.4f,%.4f,%.4f,%d\n", x[i], y[i], z[i], r[i], s[i])
+		end
+	end
+	jldsave(joinpath(dir, "$(panel).jld2"); x = x, y = y, z = z, r = r, cell_state = s,
+			meta = Dict(String(k) => v for (k, v) in meta))
+	"$(panel).csv"
+end;
+
+"Read a panel written by save_panel: (x, y, z, r, cell_state)."
+function load_panel(file)
+	raw = readdlm(file, ','; header = true)[1]
+	(x = Float64.(raw[:, 1]), y = Float64.(raw[:, 2]), z = Float64.(raw[:, 3]),
+	 r = Float64.(raw[:, 4]), cell_state = Int.(raw[:, 5]))
+end;
+
+"""
+	draw_cells!(pos, c; view = :top, cut_top = true, label = "", labelsize = 18, bs = nothing)
+
+One 3D panel in the plot_pancake look (Axis3 + meshscatter) at the figure position
+`pos`, for the cells `c` (anything with x, y, z, r, cell_state):
+
+	:top      seen from above; with cut_top the cells above the mid-plane are left
+	          out (a cutaway), otherwise the C roof hides the B cells
+	:side     seen from the side, all cells (shows the slab thickness)
+	:front    the side view turned by 90 degrees (x runs left to right)
+	:oblique  a three-quarter view from above, all cells
+
+`bs` is the half-width of the box (default: fits the aggregate).
+"""
+function draw_cells!(pos, c; view = :top, cut_top = true, label = "", labelsize = 18, bs = nothing)
+	x, y, z, r, s = c.x, c.y, c.z, c.r, c.cell_state
+	xc, yc, zc = mean(x), mean(y), mean(z)
+	bs = bs === nothing ? max(maximum(x) - minimum(x), maximum(y) - minimum(y)) / 2 + 2.0 : bs
+	keep = (view == :top && cut_top) ? findall(w -> w <= zc + 0.2, z) : collect(eachindex(z))
+	ax = Axis3(pos, aspect = :data,
+		azimuth = view == :oblique ? pi/4 : view == :front ? pi/2 : 0,
+		elevation = view == :top ? pi/2 : view in (:side, :front) ? 2*pi + pi/32 : pi/5,
+		xlabel = "", ylabel = "", zlabel = "",
+		xgridvisible = false, ygridvisible = false, zgridvisible = false,
+		xspinesvisible = false, yspinesvisible = false, zspinesvisible = false,
+		xticksvisible = false, yticksvisible = false, zticksvisible = false,
+		xticklabelsvisible = false, yticklabelsvisible = false, zticklabelsvisible = false,
+		titlevisible = !isempty(label), title = label, titlesize = labelsize, titlegap = 4)
+	o = sort(keep; by = m -> s[m], rev = true)     # draw C first
+	meshscatter!(ax, x[o] .- xc, y[o] .- yc, z[o] .- zc;
+		markersize = r[o], color = [color_map[s[m]] for m in o])
+	xlims!(ax, -bs, bs); ylims!(ax, -bs, bs); zlims!(ax, -bs, bs)
+	ax
+end;
+
+"""
+	plot_panels(dir; size_ratio = 0.6, labelsize = 18)
+
+A final 3D figure from its data folder (title.txt, panels.tsv, <panel>.csv). Each
+panel sits at (row, col) of panels.tsv and gets one axis row per view
+("top", "side", "front", "oblique", or several joined by "+").
+"""
+function plot_panels(dir; size_ratio = 0.6, labelsize = 18)
+	lines_ = filter(l -> !isempty(strip(l)), readlines(joinpath(dir, "panels.tsv")))
+	pans = [split(l, '\t') for l in lines_[2:end]]       # panel, row, col, views, label, file
+	views(p) = Symbol.(split(p[4], "+"))
+	nrow = maximum(parse(Int, p[2]) for p in pans)
+	ncol = maximum(parse(Int, p[3]) for p in pans)
+	# every figure row is as tall as its panel with the most views
+	nv = [maximum([length(views(p)) for p in pans if parse(Int, p[2]) == i]; init = 1) for i in 1:nrow]
+	start = cumsum(vcat(1, nv[1:end-1]))
+	title = isfile(joinpath(dir, "title.txt")) ? strip(read(joinpath(dir, "title.txt"), String)) : ""
+	toff = isempty(title) ? 0 : 1
+	# a side view is flat: an axis row with only side views gets 40 % of the height
+	h = round(Int, 470*size_ratio)
+	flat = [all(p -> parse(Int, p[2]) != i || length(views(p)) < jv || views(p)[jv] == :side, pans)
+			for i in 1:nrow for jv in 1:nv[i]]
+	fig = Figure(size = (round(Int, 520*size_ratio*ncol), sum(f ? round(Int, 0.4h) : h for f in flat) + 70*toff),
+				 figure_padding = 20)
+	# the title shrinks to fit a narrow figure
+	W = round(Int, 520*size_ratio*ncol)
+	isempty(title) || Label(fig[1, 1:ncol], title; fontsize = min(labelsize + 6, round(Int, 1.8W / length(title))), font = :bold)
+	for p in pans
+		row, col = parse(Int, p[2]), parse(Int, p[3])
+		c = load_panel(joinpath(dir, p[6]))
+		for (jv, v) in enumerate(views(p))
+			draw_cells!(fig[toff + start[row] + jv - 1, col], c; view = v,
+						label = jv == 1 ? replace(p[5], "|" => "\n") : "", labelsize = labelsize)
+		end
+	end
+	for (j, f) in enumerate(flat)
+		f && rowsize!(fig.layout, toff + j, Fixed(round(Int, 0.4h)))
+	end
+	isempty(title) || rowgap!(fig.layout, 1, 50)
+	fig
+end;
+
+"""
+	write_panels(dir, title, panels)
+
+Write a final figure's data folder. `panels` is a vector of NamedTuples
+(panel, row, col, views, label, cells, meta): cells has x, y, z, r, cell_state
+(e.g. one frame of load_frames), meta a NamedTuple saved in the .jld2.
+"""
+function write_panels(dir, title, panels)
+	mkpath(dir)
+	write(joinpath(dir, "title.txt"), title)
+	open(joinpath(dir, "panels.tsv"), "w") do io
+		println(io, "panel\trow\tcol\tviews\tlabel\tfile")
+		for p in panels
+			c = p.cells
+			f = save_panel(dir, p.panel, c.x, c.y, c.z, c.r, c.cell_state; p.meta...)
+			println(io, join((p.panel, p.row, p.col, p.views, replace(p.label, "\n" => "|"), f), '\t'))
+		end
+	end
+	dir
+end;
+
+PHASE_LABELS = Dict("CENTRAL" => "central cluster", "PATTERN" => "pattern (ring or islands)",
+					"POLARISED" => "polarised", "OTHER" => "other");
+
+"""
+	phase_space!(pos, rows; insets = NamedTuple[], free = NamedTuple[], title = "",
+	             x = :log, y = :layers, colors = PHASE_COLORS, background = 0.22, fontsize = 20,
+	             pie_scale = 1.0, region_labels = nothing, axis = (;))
+
+The chart of plot_phase_space, drawn at the figure position `pos` (so it can be
+composed into a bigger figure). Returns the axis.
+
+* `x`  :log      log10 N0, as in your sketch;  :linear  N0
+* `y`  :layers   the plate gap in cell layers;  :diameter  the pancake diameter at
+                 squeezing, in cell diameters (rows need D). Both on log axes.
+* `background`   opacity of the region colours
+* `pie_scale`    scales the pies (smaller for a sketch-like chart)
+* `region_labels` class => text, written in the middle of that class's region
+* `axis`         more Axis attributes (e.g. bbox, to place it by hand)
+"""
+function phase_space!(pos, rows; insets = NamedTuple[], free = NamedTuple[], title = "",
+		x = :log, y = :layers, colors = PHASE_COLORS, background = 0.22, fontsize = 20,
+		pie_scale = 1.0, region_labels = nothing, axis = (;))
+	order = ["CENTRAL", "PATTERN", "POLARISED", "OTHER"]
+	major(o) = order[argmax([count(==(c), o) for c in order])]
+	pts = unique([(Float64(r.layers), Int(r.N0)) for r in rows])
+	outc = Dict(p => [phase_class(r.class) for r in rows if (r.layers, r.N0) == p] for p in pts)
+	# a point sits at the mean pancake diameter of its seeds
+	Dm = y == :diameter ? Dict(p => mean(r.D for r in rows if (r.layers, r.N0) == p) for p in pts) : Dict()
+	# the unconfined runs: one more row above the thickest gap (layers = Inf)
+	for N in unique([r.N0 for r in free])
+		push!(pts, (Inf, N)); outc[(Inf, N)] = [phase_class(r.class) for r in free if r.N0 == N]
+	end
+	conf = filter(p -> isfinite(p[1]), pts)
+
+	# plot coordinates: N0 across 10 units, the confinement up 8, the free row at 9.4
+	fx(N) = x == :log ? log10(N) : float(N)
+	fy(p) = y == :layers ? log2(p[1]) : log2(Dm[p])
+	x0, x1 = x == :log ? (log10(minimum(last.(pts))), log10(maximum(last.(pts)))) : (0.0, float(maximum(last.(pts))))
+	y0, y1 = extrema(fy.(conf))
+	Yv(v) = 8 * (v - y0) / (y1 - y0)
+	X(N) = 10 * (fx(N) - x0) / (x1 - x0)
+	Y(p) = isfinite(p[1]) ? Yv(fy(p)) : 9.4
+	top = any(p -> !isfinite(p[1]), pts) ? 10.1 : 8.7
+
+	if x == :log
+		xt = filter(t -> x0 - 0.05 <= t <= x1 + 0.05, 1.5:0.5:4.5)
+		xticks = (10 .* (xt .- x0) ./ (x1 - x0), [@sprintf("%g", t) for t in xt]); xlabel = "log₁₀ N0 (cells at squeezing)"
+	else
+		xt = 0:1000:maximum(last.(pts))
+		xticks = (10 .* xt ./ x1, string.(xt)); xlabel = "N0 (cells at squeezing)"
+	end
+	if y == :layers
+		yt = sort(unique(first.(conf)))
+		yticks = (vcat(Yv.(log2.(yt)), top > 9 ? [9.4] : Float64[]), vcat([@sprintf("%g", L) for L in yt], top > 9 ? ["unconfined"] : String[]))
+		ylabel = "plate gap (cell layers)"
+	else
+		yt = filter(t -> 2.0^y0 / 1.1 <= t <= 2.0^y1 * 1.1, [4, 5, 7, 10, 15, 20, 30, 40, 60, 80, 120])
+		yticks = (vcat(Yv.(log2.(yt)), top > 9 ? [9.4] : Float64[]), vcat(string.(yt), top > 9 ? ["unconfined"] : String[]))
+		ylabel = "pancake diameter at squeezing (cell diameters)"
+	end
+	ax = Axis(pos; aspect = DataAspect(), title = title, titlesize = fontsize + 2,
+		xlabel = xlabel, ylabel = ylabel, xlabelsize = fontsize, ylabelsize = fontsize,
+		xticks = xticks, yticks = yticks, xgridvisible = false, ygridvisible = false,
+		xticklabelsize = fontsize - 4, yticklabelsize = fontsize - 4, axis...)
+	limits!(ax, -0.7, 10.7, -0.7, top)
+
+	# background: majority outcome of the nearest point
+	xs = range(-0.7, 10.7, length = 460); ys = range(-0.7, top, length = 400)
+	P = [(X(p[2]), Y(p)) for p in pts]
+	grid = [findfirst(==(major(outc[pts[argmin([(q[1] - u)^2 + (q[2] - v)^2 for q in P])]])), order) for u in xs, v in ys]
+	fade(c, a) = RGBAf(c.r, c.g, c.b, a)
+	heatmap!(ax, xs, ys, grid; colormap = cgrad([fade(colors[c], background) for c in order], length(order); categorical = true),
+			 colorrange = (0.5, length(order) + 0.5))
+	# the axis break between the plates and the unconfined row
+	top > 9 && poly!(ax, Rect2f(-0.7, 8.55, 11.4, 0.3); color = :white)
+
+	# thresholds, per number of layers (the unconfined row included)
+	for (which, style) in (("PATTERN", :dash), ("POLARISED", :dot))
+		tx = Float64[]; ty = Float64[]
+		for L in sort(unique(first.(pts)))
+			row = sort(filter(p -> p[1] == L, pts); by = last)
+			m = [major(outc[p]) == which for p in row]
+			if which == "PATTERN"     # patterns from some N0 on, up to the largest
+				i = findlast(!, m)                     # the last N0 without a pattern
+				i == length(row) && continue
+				i === nothing ? (push!(tx, max(X(row[1][2]) - 0.5, -0.3)); push!(ty, Y(row[1]))) :
+					(push!(tx, (X(row[i][2]) + X(row[i+1][2])) / 2); push!(ty, (Y(row[i]) + Y(row[i+1])) / 2))
+			else                      # polarised up to some N0
+				i = findfirst(!, m)                    # the first N0 that does not polarise
+				i == 1 && continue
+				i === nothing ? (push!(tx, min(X(row[end][2]) + 0.5, 10.3)); push!(ty, Y(row[end]))) :
+					(push!(tx, (X(row[i-1][2]) + X(row[i][2])) / 2); push!(ty, (Y(row[i-1]) + Y(row[i])) / 2))
+			end
+		end
+		length(tx) >= 1 && lines!(ax, tx, ty; color = colors[which], linewidth = 3, linestyle = style)
+		length(tx) >= 1 && scatter!(ax, tx, ty; color = colors[which], markersize = 9)
+	end
+
+	# one pie per point: the seeds' outcomes; smaller where points crowd
+	rad = Dict(p => pie_scale * clamp(0.45 * minimum([hypot(X(p[2]) - X(q[2]), Y(p) - Y(q)) for q in pts if q != p]; init = 1.0), 0.13, 0.42)
+			   for p in pts)
+	for p in pts
+		o = outc[p]; n = length(o); a0 = pi/2; cx, cy = X(p[2]), Y(p)
+		for c in order
+			k = count(==(c), o); k == 0 && continue
+			a1 = a0 - 2pi * k / n
+			th = range(a0, a1, length = max(2, ceil(Int, 40 * k / n)))
+			poly!(ax, Point2f[(cx, cy); [(cx + rad[p]*cos(t), cy + rad[p]*sin(t)) for t in th]];
+				  color = colors[c], strokecolor = :white, strokewidth = k == n ? 0 : 1.5)
+			a0 = a1
+		end
+	end
+
+	# region names, below the unconfined row: inside each region (the whole text width
+	# within it), at the spot farthest from any pie and from the names already placed,
+	# pulled a little towards the middle of the region
+	if region_labels !== nothing
+		placed = Tuple{Float64,Float64}[]
+		for c in order
+			haskey(region_labels, c) || continue
+			txt = region_labels[c]; k = findfirst(==(c), order)
+			hw = 0.12 * length(txt)              # about half the text width
+			di = ceil(Int, hw / step(xs)); dj = ceil(Int, 0.3 / step(ys))
+			inside(i, j) = all(grid[clamp(i + a, 1, length(xs)), clamp(j + b, 1, length(ys))] == k
+							   for a in (-di, 0, di), b in (-dj, 0, dj))
+			in_ = [(u, v) for (i, u) in enumerate(xs), (j, v) in enumerate(ys)
+				   if grid[i, j] == k && hw - 0.5 < u < 10.5 - hw && 0 < v < 8.2 && inside(i, j)]
+			isempty(in_) && continue
+			m = (mean(first.(in_)), mean(last.(in_)))
+			score(q) = min(minimum(hypot(q[1] - P_[1], q[2] - P_[2]) for P_ in P),
+						   minimum((hypot((q[1] - p_[1]) / 3, q[2] - p_[2]) for p_ in placed); init = Inf)) -
+					   0.15hypot(q[1] - m[1], q[2] - m[2])
+			at = in_[argmax(score.(in_))]
+			push!(placed, at)
+			cc = colors[c]
+			text!(ax, at...; text = txt, align = (:center, :center), fontsize = fontsize + 1,
+				  font = :bold, color = RGBf(0.5cc.r, 0.5cc.g, 0.5cc.b))
+		end
+	end
+
+	# the insets' letters at their points
+	for (i, ins) in enumerate(insets)
+		p = (ins.layers, ins.N0); haskey(outc, p) || continue
+		text!(ax, X(p[2]) + rad[p] + 0.06, Y(p) + rad[p]; text = string('A' + i - 1), fontsize = fontsize + 2,
+			  font = :bold, align = (:left, :bottom))
+	end
+	ax
+end;
+
+"""
+	plot_phase_space(rows; insets = NamedTuple[], free = NamedTuple[], title = "",
+	                 x = :log, y = :layers, colors = PHASE_COLORS, labels = PHASE_LABELS)
+
+The phase space. `rows` has one entry per run with fields layers, N0, class (the
+class at the readout, classify_pattern) and, for y = :diameter, D.
+
+* x = :log (log10 N0) or :linear (N0); y = :layers (plate gap) or :diameter (the
+  pancake diameter at squeezing); see phase_space!
+* every (layers, N0) point is a pie of the outcomes of its seeds
+* the background takes the colour of the majority outcome of the nearest point
+* two thresholds per number of layers, where they exist: the N0 above which
+  patterns form (dashed), and the N0 below which the aggregate polarises (dotted),
+  half-way between the two points that bracket the change; half a step outside
+  the grid when every point is past it
+* `insets`: (cells, label, layers, N0) drawn in 3D on the right (top cutaway and
+  side view), each tied to its point by a letter
+* `free`: unconfined runs (N0, class), drawn as an extra top row "unconfined" --
+  what a gap much wider than the aggregate tends to
+"""
+function plot_phase_space(rows; insets = NamedTuple[], free = NamedTuple[], title = "",
+		x = :log, y = :layers, colors = PHASE_COLORS, labels = PHASE_LABELS)
+	order = ["CENTRAL", "PATTERN", "POLARISED", "OTHER"]
+	fig = Figure(size = (isempty(insets) ? 900 : 1500, 820), figure_padding = 20)
+	phase_space!(fig[1, 1], rows; insets = insets, free = free, title = title, x = x, y = y, colors = colors)
+	if !isempty(insets)
+		g = fig[1, 2] = GridLayout()
+		for (i, ins) in enumerate(insets)
+			letter = string('A' + i - 1)
+			draw_cells!(g[i, 1], ins.cells; view = :top, label = "$letter  " * ins.label, labelsize = 17)
+			draw_cells!(g[i, 2], ins.cells; view = :side)
+		end
+		colsize!(fig.layout, 2, Relative(0.36))
+	end
+	Legend(fig[2, 1], [PolyElement(color = colors[c]) for c in order], [labels[c] for c in order];
+		   orientation = :horizontal, framevisible = false, labelsize = 18)
+	fig
+end;
+
+"""
+	record_pancake_frames(d, color_map, ks; views = (:top, :side), fps = 8,
+	                      size_ratio = 0.8, filename = "movie.mp4")
+
+record_pancake for the array format of load_frames: one column per view, one
+movie frame per index in `ks`, the time (hours) and B fraction in the title.
+The top view is the mid-plane cutaway, as in plot_gallery. Cells are padded to
+the largest frame (unused ones get size 0) so the plot can be updated in place
+while cells divide.
+"""
+function record_pancake_frames(d, color_map, ks; views = (:top, :side), fps = 8,
+		size_ratio = 0.8, filename = "movie.mp4")
+	nmax = maximum(length(d.x[k]) for k in ks)
+	bs = maximum(max(maximum(d.x[k]) - minimum(d.x[k]), maximum(d.y[k]) - minimum(d.y[k])) for k in ks) / 2 + 2.0
+	fig = Figure(size = (round(Int, 600*size_ratio*length(views)), round(Int, 600*size_ratio)), figure_padding = 20)
+	ttl = Observable("")
+	Label(fig[0, 1:length(views)], ttl; fontsize = 24)
+	frame_data(k, v) = begin
+		x, y, z, r, s = d.x[k], d.y[k], d.z[k], d.r[k], d.cell_state[k]
+		zc = mean(z)
+		show_ = [!(v == :top && z[i] > zc + 0.2) for i in eachindex(z)]
+		pad = nmax - length(x)
+		P = [Point3f(x[i] - mean(x), y[i] - mean(y), z[i] - zc) for i in eachindex(x)]
+		(vcat(P, fill(Point3f(0, 0, 0), pad)),
+		 vcat([show_[i] ? Float32(r[i]) : 0f0 for i in eachindex(r)], zeros(Float32, pad)),
+		 vcat([color_map[s[i]] for i in eachindex(s)], fill(color_map[3], pad)))
+	end
+	obs = []
+	for (j, v) in enumerate(views)
+		ax = Axis3(fig[1, j], aspect = :data, azimuth = 0,
+			elevation = v == :top ? pi/2 : 2*pi + pi/32,
+			xgridvisible = false, ygridvisible = false, zgridvisible = false,
+			xspinesvisible = false, yspinesvisible = false, zspinesvisible = false,
+			xticksvisible = false, yticksvisible = false, zticksvisible = false,
+			xticklabelsvisible = false, yticklabelsvisible = false, zticklabelsvisible = false,
+			xlabel = "", ylabel = "", zlabel = "", title = String(v), titlesize = 20)
+		P, R, C = frame_data(ks[1], v)
+		Po = Observable(P); Ro = Observable(R); Co = Observable(C)
+		meshscatter!(ax, Po; markersize = Ro, color = Co)
+		xlims!(ax, -bs, bs); ylims!(ax, -bs, bs); zlims!(ax, -bs, bs)
+		push!(obs, (v, Po, Ro, Co))
+	end
+	record(fig, filename, ks; framerate = fps) do k
+		for (v, Po, Ro, Co) in obs
+			P, R, C = frame_data(k, v)
+			Po[] = P; Ro[] = R; Co[] = C        # padded: the lengths never change
+		end
+		fB = count(==(2), d.cell_state[k]) / length(d.cell_state[k])
+		ttl[] = @sprintf("t = %.1f h   fB = %.2f   N = %d", d.t[k] / 15,      # 15 time units = 1 h
+			 fB, length(d.x[k]))
+	end
+	filename
+end;
+
+"""
+	replot_figures(figdir; save_png = true)
+
+Redraw every final figure from figdir/data alone: each data/<figure>/ with a
+panels.tsv becomes figdir/<figure>.png; each data/phase_space*/ (phase_space.csv,
+free.csv, panels.tsv for the insets, readout.txt naming the class column to draw)
+becomes four charts, figdir/phase_space*.png (y = plate gap, x = log10 N0),
+*_N0.png (x = N0), *_diameter.png and *_diameter_N0.png (y = pancake diameter at
+squeezing, when phase_space.csv has the column D).
+"""
+function replot_figures(figdir; save_png = true)
+	figs = Dict{String,Any}()
+	for name in sort(readdir(joinpath(figdir, "data")))
+		dir = joinpath(figdir, "data", name)
+		isdir(dir) || continue
+		if startswith(name, "phase_space") && isfile(joinpath(dir, "phase_space.csv"))
+			# which readout to draw: readout.txt names the class column (default class_02)
+			ccol = isfile(joinpath(dir, "readout.txt")) ? String(strip(read(joinpath(dir, "readout.txt"), String))) : "class_02"
+			raw, hdr = readdlm(joinpath(dir, "phase_space.csv"), ','; header = true)
+			col = Dict(strip(String(hdr[i])) => i for i in eachindex(hdr))
+			rows = [(layers = Float64(raw[i, col["layers"]]), N0 = Int(raw[i, col["N0"]]),
+					 class = String(raw[i, col[ccol]]), D = haskey(col, "D") ? Float64(raw[i, col["D"]]) : NaN)
+					for i in 1:size(raw, 1)]
+			ins = NamedTuple[]
+			if isfile(joinpath(dir, "panels.tsv"))
+				for l in readlines(joinpath(dir, "panels.tsv"))[2:end]
+					isempty(strip(l)) && continue
+					p = split(l, '\t')       # panel, layers, N0, views, label, file
+					push!(ins, (cells = load_panel(joinpath(dir, p[6])), label = replace(p[5], "|" => "\n"),
+								layers = parse(Float64, p[2]), N0 = parse(Int, p[3])))
+				end
+			end
+			free = NamedTuple[]
+			if isfile(joinpath(dir, "free.csv"))      # unconfined runs: N0, seed, class_02, ...
+				raw, hdr = readdlm(joinpath(dir, "free.csv"), ','; header = true)
+				fc = Dict(strip(String(hdr[i])) => i for i in eachindex(hdr))
+				free = [(N0 = Int(raw[i, fc["N0"]]), class = String(raw[i, fc[ccol]])) for i in 1:size(raw, 1)]
+			end
+			title = isfile(joinpath(dir, "title.txt")) ? strip(read(joinpath(dir, "title.txt"), String)) : ""
+			for (suffix, x, y) in (("", :log, :layers), ("_N0", :linear, :layers),
+								   ("_diameter", :log, :diameter), ("_diameter_N0", :linear, :diameter))
+				y == :diameter && !haskey(col, "D") && continue
+				figs[name * suffix] = plot_phase_space(rows; insets = ins, free = free, title = title, x = x, y = y)
+				save_png && save(joinpath(figdir, "$(name)$(suffix).png"), figs[name * suffix])
+			end
+		elseif isfile(joinpath(dir, "panels.tsv"))
+			figs[name] = plot_panels(dir)
+			save_png && save(joinpath(figdir, "$(name).png"), figs[name])
+		end
+		haskey(figs, name) && println("redrew $(name)")
+	end
+	figs
+end;
+
 # ---- notebook cell 9557e7da ----------------------------------------------------
 # --- island detection ---------------------------------------------------------
 
@@ -741,6 +1286,251 @@ end;
 confinement_report(com, L; kw...) = confinement_report(com.z, L; kw...);
 
 
+# ---- notebook cell 7c1d9e42 ----------------------------------------------------
+# --- slab thickness over time ----------------------------------------------------
+
+"""
+	thickness_timeline(d, L; from = 1, r = 1.0)
+
+How thick the slab stays, frame by frame. For a plate gap L the cell centres
+should sit in [r, L - r]. Returns, per frame:
+
+* `spread`      full z-spread of the centres
+* `spread98`    z-spread of the central 98 % (robust to a few stray cells)
+* `layers_eff`  effective number of layers, (spread98 + 2r) / (2.1 r): the gap
+                for `layers` layers is 2.1 r * layers, so 1.0 = one cell thick
+* `outside`     fraction of centres outside [r, L - r]
+"""
+function thickness_timeline(d, L; from = 1, r = 1.0)
+	out = NamedTuple[]
+	for k in from:length(d.z)
+		z = d.z[k]
+		sp   = maximum(z) - minimum(z)
+		sp98 = quantile(z, 0.99) - quantile(z, 0.01)
+		push!(out, (t = d.t[k], spread = sp, spread98 = sp98,
+					layers_eff = (sp98 + 2r) / (2.1r),
+					outside = count(v -> v < r - 1e-6 || v > L - r + 1e-6, z) / length(z)))
+	end
+	out
+end;
+
+# ---- notebook cell 2d4f6a81 ----------------------------------------------------
+# --- pattern readout for the B/C model --------------------------------------------
+#
+# Mirrors how the experimental images are segmented: B cells sitting in a dense B
+# neighbourhood form clusters (the coloured islands in experiments/pattern-examples),
+# the others are isolated cells (the white points there).
+#
+#   core B cell   at least `kmin` other B cells within `cut` (1.3 cell diameters)
+#   cluster       core cells linked within `cut`, plus the B cells touching them
+#   island        a cluster of at least `nmin` cells
+#   isolated      any other B cell
+#
+# The July readout (island_stats, cell above) used plain single linkage and called
+# a loose texture "dispersed" -- the very kind of pattern we now want -- so the B/C
+# readout is built on this instead.
+
+"""
+	b_clusters(x, y, z, s; cut = 2.6, kmin = 3)
+
+Cluster label of every B cell (0 = isolated). Returns (idx, label, nbrs): `idx`
+are the indices of the B cells, `label[i]` the cluster of idx[i], `nbrs[i]` its
+B neighbours (positions in idx).
+"""
+function b_clusters(x, y, z, s; cut = 2.6, kmin = 3)
+	idx = findall(==(2), s)
+	n = length(idx)
+	label = zeros(Int, n)
+	nbrs = [Int[] for _ in 1:n]
+	n == 0 && return (idx = idx, label = label, nbrs = nbrs)
+	px, py, pz = x[idx], y[idx], z[idx]
+	lo = (minimum(px), minimum(py), minimum(pz))
+	cell(i) = (floor(Int, (px[i]-lo[1])/cut), floor(Int, (py[i]-lo[2])/cut),
+			   floor(Int, (pz[i]-lo[3])/cut))
+	bucket = Dict{NTuple{3,Int},Vector{Int}}()
+	for i in 1:n; push!(get!(bucket, cell(i), Int[]), i); end
+	c2 = cut^2
+	for i in 1:n
+		ci = cell(i)
+		for dx in -1:1, dy in -1:1, dz in -1:1
+			b = get(bucket, (ci[1]+dx, ci[2]+dy, ci[3]+dz), nothing)
+			b === nothing && continue
+			for j in b
+				j == i && continue
+				if (px[i]-px[j])^2 + (py[i]-py[j])^2 + (pz[i]-pz[j])^2 < c2
+					push!(nbrs[i], j)
+				end
+			end
+		end
+	end
+	core = [length(nbrs[i]) >= kmin for i in 1:n]
+	nlab = 0
+	for i in 1:n
+		(core[i] && label[i] == 0) || continue
+		nlab += 1
+		stack = [i]; label[i] = nlab
+		while !isempty(stack)
+			a = pop!(stack)
+			for b in nbrs[a]
+				if core[b] && label[b] == 0
+					label[b] = nlab; push!(stack, b)
+				end
+			end
+		end
+	end
+	for i in 1:n
+		core[i] && continue
+		for b in nbrs[i]
+			if core[b]; label[i] = label[b]; break; end
+		end
+	end
+	(idx = idx, label = label, nbrs = nbrs)
+end;
+
+"Mean, over the B cells `idx`, of the fraction of B among each cell's neighbours within `cut`."
+function looseness(x, y, z, s, idx; cut = 2.6)
+	n = length(x)
+	lo = (minimum(x), minimum(y), minimum(z))
+	cell(i) = (floor(Int, (x[i]-lo[1])/cut), floor(Int, (y[i]-lo[2])/cut),
+			   floor(Int, (z[i]-lo[3])/cut))
+	bucket = Dict{NTuple{3,Int},Vector{Int}}()
+	for i in 1:n; push!(get!(bucket, cell(i), Int[]), i); end
+	c2 = cut^2
+	acc = 0.0; m = 0
+	for i in idx
+		ci = cell(i); nb = 0; nbB = 0
+		for dx in -1:1, dy in -1:1, dz in -1:1
+			b = get(bucket, (ci[1]+dx, ci[2]+dy, ci[3]+dz), nothing)
+			b === nothing && continue
+			for j in b
+				j == i && continue
+				if (x[i]-x[j])^2 + (y[i]-y[j])^2 + (z[i]-z[j])^2 < c2
+					nb += 1
+					s[j] == 2 && (nbB += 1)
+				end
+			end
+		end
+		if nb > 0; acc += nbB / nb; m += 1; end
+	end
+	m == 0 ? NaN : acc / m
+end;
+
+"""
+	pattern_stats(x, y, z, s; confined = true, cut = 2.6, kmin = 3, nmin = 10)
+
+One frame of the B/C model. Returns:
+
+	nB, fB      number and fraction of B cells
+	n_isl       number of islands (clusters of >= nmin cells)
+	f_isl       fraction of B cells in islands
+	f_iso       fraction of B cells that are isolated
+	f_max       fraction of B cells in the largest island
+	offset      3D shift of the B centroid from the aggregate centre, / R
+	            (a polarised aggregate can shift in-plane or towards a plate)
+	offset_max  the same for the largest island
+	spread      mean distance of the B cells from the centre, / R: how far B is
+	            spread out (a compact central blob ~0.1, rings and islands ~0.4-0.6)
+	fill        B fraction of the cells in the middle (closer to the centre than
+	            0.7 x the radius a compact central blob of the current B would
+	            have): ~0.7-0.9 for a central cluster, even a loose one; ~0.2-0.4
+	            for a ring (C in the middle) or islands
+	S           looseness: mean fraction of B among a B cell's neighbours
+	            (compact islands -> ~0.8-0.9, random mixing -> ~fB)
+	sizes       island sizes, largest first
+	confined    as passed in (classify_pattern uses it)
+
+R and `spread` use in-plane distances when `confined` (a slab), 3D otherwise; R is
+the 98th percentile distance of all cells from the aggregate centre.
+"""
+function pattern_stats(x, y, z, s; confined = true, cut = 2.6, kmin = 3, nmin = 10)
+	N = length(s)
+	cl = b_clusters(x, y, z, s; cut = cut, kmin = kmin)
+	idx, lab = cl.idx, cl.label
+	nB = length(idx)
+	xc, yc, zc = mean(x), mean(y), mean(z)
+	dz = confined ? 0.0 : 1.0
+	rho = sqrt.((x .- xc).^2 .+ (y .- yc).^2 .+ dz .* (z .- zc).^2)
+	R = quantile(rho, 0.98)
+	nB == 0 && return (nB = 0, fB = 0.0, n_isl = 0, f_isl = 0.0, f_iso = 0.0, f_max = 0.0,
+					   offset = NaN, offset_max = NaN, spread = NaN, fill = NaN, S = NaN, sizes = Int[],
+					   confined = confined)
+	counts = Dict{Int,Int}()
+	for l in lab; l > 0 && (counts[l] = get(counts, l, 0) + 1); end
+	isl = [l for (l, c) in counts if c >= nmin]
+	sizes = sort([counts[l] for l in isl]; rev = true)
+	shift(sel) = sqrt((mean(x[sel]) - xc)^2 + (mean(y[sel]) - yc)^2 + (mean(z[sel]) - zc)^2) / R
+	offset = shift(idx)
+	offset_max = isempty(isl) ? NaN : shift(idx[lab .== isl[argmax([counts[l] for l in isl])]])
+	inner = findall(<(0.7 * (confined ? sqrt(nB / N) : cbrt(nB / N)) * R), rho)
+	fill = isempty(inner) ? NaN : count(i -> s[i] == 2, inner) / length(inner)
+	(nB = nB, fB = nB / N, n_isl = length(isl), f_isl = sum(sizes; init = 0) / nB,
+	 f_iso = count(==(0), lab) / nB, f_max = isempty(sizes) ? 0.0 : sizes[1] / nB,
+	 offset = offset, offset_max = offset_max, spread = mean(rho[idx]) / R, fill = fill,
+	 S = looseness(x, y, z, s, idx; cut = cut), sizes = sizes, confined = confined)
+end;
+
+"""
+	classify_pattern(st; pol = 0.4, cen = nothing, iso = 0.7)
+
+From pattern_stats, in this order:
+
+	"NONE"       no B left, or most B cells isolated (f_iso >= iso)
+	"POLARISED"  B as a whole has moved to one side (offset >= pol)
+	"CENTRAL"    B gathered in the middle: spread < cen, or a cluster holding
+	             half of B that fills the middle (fill >= 0.55)
+	"RING"       B spread out, but still one connected network centred on the
+	             middle (largest island >= half of B, its centre within 0.2 R)
+	"ISLANDS"    B spread out in several islands
+	"CENTRAL"    also: a single loose cluster that has not moved (at most one island,
+	             offset < 0.25) -- too little B left for a pattern; typical of very
+	             small aggregates (Oct 7)
+	"OTHER"      anything else -- look at it (e.g. a cluster drifting off-centre)
+
+`cen` defaults to 0.30 in a slab and 0.45 in 3D: B gathered into a central blob
+holding 20 % of the cells has spread ~0.30 in a disc and ~0.44 in a ball -- so
+at the readout a slightly loose central cluster misses it; the `fill` test
+catches those (added Oct 7, checked by eye: central clusters 0.65-0.85, rings
+0.24-0.41; reports/REPORT.md, stage 5).
+"""
+function classify_pattern(st; pol = 0.4, cen = nothing, iso = 0.7)
+	(st.nB == 0 || st.f_iso >= iso) && return "NONE"
+	st.offset >= pol && return "POLARISED"
+	c = cen === nothing ? (st.confined ? 0.30 : 0.45) : cen
+	st.spread < c && return "CENTRAL"
+	(st.f_max >= 0.5 && st.fill >= 0.55) && return "CENTRAL"
+	(st.f_max >= 0.5 && st.offset_max < 0.2) && return "RING"
+	st.n_isl >= 2 && return "ISLANDS"
+	(st.n_isl <= 1 && st.offset < 0.25) && return "CENTRAL"
+	return "OTHER"
+end;
+
+"""
+	pattern_timeline(d; from = 1, confined = true, kw...)
+
+pattern_stats and classify_pattern for every frame of `d` (from load_frames),
+starting at frame `from`. Each row also carries t and the frame index k.
+"""
+function pattern_timeline(d; from = 1, confined = true, kw...)
+	out = NamedTuple[]
+	for k in from:length(d.x)
+		st = pattern_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; confined = confined, kw...)
+		push!(out, merge((k = k, t = d.t[k], class = classify_pattern(st)), st))
+	end
+	out
+end;
+
+"""
+	readout_row(tl; fB_read = 0.2)
+
+The row of a pattern_timeline at the readout: the first frame where the B fraction
+has dropped to `fB_read` (the experimental 96 h reference), or the last frame if
+it never does.
+"""
+function readout_row(tl; fB_read = 0.2)
+	i = findfirst(r -> r.fB <= fB_read, tl)
+	tl[i === nothing ? length(tl) : i]
+end;
+
 # ---- notebook cell 047d722c ----------------------------------------------------
 # --- adhesion energetics (Differential Adhesion Hypothesis) --------------------
 #
@@ -799,7 +1589,7 @@ end;
 
 
 # ---- notebook cell cad66be3 ----------------------------------------------------
-# --- two-aggregate fusion assay (Sotiris' experiment) --------------------------
+# --- two-aggregate fusion assay ------------------------------------------------
 #
 # Time calibration: p = 0.009333 <-> 7.1 h and q = 0.004667 <-> 14.1 h both give
 #     1 hour = 15 model time units,      so 12 h = 180, 24 h = 360.
@@ -825,11 +1615,9 @@ function make_aggregate(n, state, mu_, fatt_, frep_; seed = 99, relax = 200.0)
 	c.t_div = 1
 	c.g_on = true; c.d_on = false
 	c.confinement = false; c.L = 4.2; c.rep_wall = 60; c.alpha_ecm = 0.9
-	c.fA = 0.0
 	c.abm.neighbors.cellEdge = (2*maximum(c.r))*maximum(c.mu)
 	loadToPlatform!(c, preallocateAgents = round(Int, 1.5n))
 	while c.N[1] < n
-		push_fA!(c)
 		agentStepDE!(c); agentStepRule!(c); update!(c); computeNeighbors!(c)
 	end
 	bringFromPlatform!(c)
@@ -866,9 +1654,10 @@ be the least-fused pair by a clear margin while the others round up, i.e. two
 lobes that adhere without becoming a sphere.
 """
 function fusion_assay(mu_, fatt_, frep_; n = 150, hours = 24.0,
-		pairs_ = [(1,1),(2,2),(3,3),(2,3),(1,2),(1,3)], labels = ["A","B","C"],
-		verbose = true)
-	agg = Dict(st => make_aggregate(n, st, mu_, fatt_, frep_) for st in 1:3)
+		pairs_ = [(2,2),(3,3),(2,3)], labels = ["A","B","C"],
+		verbose = true, positions = nothing)
+	# only the types that appear in pairs_ (no time spent on A when it is not asked for)
+	agg = Dict(st => make_aggregate(n, st, mu_, fatt_, frep_) for st in unique([p[k] for p in pairs_ for k in 1:2]))
 	results = Dict{String,NTuple{3,Float64}}()
 
 	for (i, j) in pairs_
@@ -887,7 +1676,7 @@ function fusion_assay(mu_, fatt_, frep_; n = 150, hours = 24.0,
 		c.cell_state = vcat(fill(i, n1), fill(j, n2))
 		c.t_div = 1e9
 		c.g_on = false; c.d_on = false
-		c.confinement = false; c.fA = 0.0
+		c.confinement = false
 		c.alpha_ecm = 0.9 * c.lambda
 		setfield!(c, :t, 0.0)
 		c.abm.neighbors.cellEdge = (2*maximum(c.r))*maximum(c.mu)
@@ -912,6 +1701,9 @@ function fusion_assay(mu_, fatt_, frep_; n = 150, hours = 24.0,
 		m24 = metric()
 		bringFromPlatform!(c)
 		results[labels[i]*labels[j]] = (m0, m12, m24)
+		# final configuration, for 3D plots of the doublet (pass positions = Dict())
+		positions === nothing || (positions[labels[i]*labels[j]] =
+			(x = copy(c.x), y = copy(c.y), z = copy(c.z), r = copy(c.r), cell_state = copy(c.cell_state)))
 	end
 
 	if verbose
@@ -925,110 +1717,157 @@ function fusion_assay(mu_, fatt_, frep_; n = 150, hours = 24.0,
 	results
 end;
 
-# Reference (Sotiris) vs the set used below, at 24 h:
-#   AA 1.614 / 1.702    BB 0.537 / 0.531    CC 0.562 / 0.536
-#   BC 0.947 / 0.744    AB 0.470 / 0.138    AC 0.657 / 0.510
-
-
 # ---- notebook cell 8a8800de ----------------------------------------------------
-# --- batch driver: one confined run end to end --------------------------------
+# --- parameter sets, plates, and one confined run end to end ---------------------
 #
-# Everything the Initialization + Differentiation cells do, as a function, so a
-# phase scan does not need the notebook's global state. Writes a *_frames.jld2.
-#
-# Note `show_progress = false` throughout: the interactive `differentiate!`
-# renders a plot_pancake every 10%, which is fine for one run in a notebook and
-# very much not fine for a scan of twenty.
+# PSETS holds the three starting points for the B/C mechanics and the set chosen
+# from them in stage 5 ("final", reports/REPORT.md). In all of them the
+# BC entries ([2,3] and [3,2]) are the FUSION values -- mu 2, f_att 1.6, f_rep 3 --
+# which stay frozen ("mainly do not touch the [2,3] and [3,2] elements"); only
+# the BB and CC entries differ. Row/column 1 (A) is kept so the matrices still
+# match the original ones; no A cell is ever created.
+PSETS = Dict(
+	# your CONFINED PATTERNS set (= 0.5 * parameters_do f_att, mu = 2), with the
+	# FUSION BC entry: f_att[2,3] 0.8 -> 1.6
+	"confined_patterns" => (
+		mu    = 2 * [1 1 1; 1 1 1; 1 1 1],
+		f_att =     [3 3 1.2; 3 3 1.6; 1.2 1.6 2.4],
+		f_rep = 3 * [1 1 1; 1 1 1; 1 1 1.7]),
+	# the July set: FUSION mu and f_att, BB and CC repulsion softened
+	"july" => (
+		mu    = 2 * [1 0.91 1; 0.91 1 1; 1 1 1.07],
+		f_att = 4 * [0.9 1.0 0.6; 1.0 1.6 0.4; 0.6 0.4 0.75],
+		f_rep = 3 * [3 1 1; 1 1 1; 1 1 1.7]),
+	# Sotiris' FUSION set, unchanged
+	"fusion" => (
+		mu    = 2 * [1 0.91 1; 0.91 1 1; 1 1 1.07],
+		f_att = 4 * [0.9 1.0 0.6; 1.0 1.6 0.4; 0.6 0.4 0.75],
+		f_rep = 3 * [3 1 1; 1 2 1; 1 1 2]),
+	# the set chosen on Oct 7: B as stiff as in july_frB4.5 (f_rep BB 4.5, the
+	# looseness you picked), C as stiff as in FUSION (f_rep CC 6, keeps a small
+	# squeezed B core from sliding to the rim). Patterns only in 1-2 layers.
+	# In the stage 5 scripts it is "july_frB4.5_frC6@lw1.5".
+	"final_oct7" => (
+		mu    = 2 * [1 0.91 1; 0.91 1 1; 1 1 1.07],
+		f_att = 4 * [0.9 1.0 0.6; 1.0 1.6 0.4; 0.6 0.4 0.75],
+		f_rep = 3 * [3 1 1; 1 1.5 1; 1 1 2]),
+	# THE CHOSEN SET (Oct 8): final_oct7 with a shorter B-B attraction range, mu BB
+	# 2 -> 1.9. B is less cohesive (adhesion energy W_BB 1.02 -> 0.79, still above
+	# C's 0.65), so a big B core in a slab of 3+ layers opens into a ring and
+	# islands instead of staying one blob. Used with plate friction LAMBDA_WALL.
+	# In the stage 5 scripts it is "july_frB4.5_frC6_muB1.9@lw1.5".
+	"final" => (
+		mu    = 2 * [1 0.91 1; 0.91 0.95 1; 1 1 1.07],
+		f_att = 4 * [0.9 1.0 0.6; 1.0 1.6 0.4; 0.6 0.4 0.75],
+		f_rep = 3 * [3 1 1; 1 1.5 1; 1 1 2]),
+);
 
-"The unified parameter set (see the Differentiation cell for the derivation)."
-const MU_SET   = 2 * [1 0.91 1; 0.91 1 1; 1 1 1.07];
-const FATT_SET = 4 * [0.9 1.0 0.6; 1.0 1.6 0.4; 0.6 0.4 0.75];
-const FREP_SET = 3 * [3 1 1; 1 1 1; 1 1 1.7];
+LAMBDA_WALL = 1.5;   # friction with the plates used with "final" (stage 5; MODEL.md section 4)
+
+TAU_WALL = 0.15;     # rigid plates: an overshoot is undone in 10 steps of dt = 0.015
 
 """
-	wall_settings(layers)
+	wall_settings(layers, wall = :rigid) -> (wall_type, rep_wall, dt)
 
-`(rep_wall, dt)` for a confined run.
+The plate models compared in stage 2 (reports/REPORT.md):
 
-A monolayer needs the stiff wall or the sheet buckles to ~1.4 cells thick, and
-the stiff wall needs a smaller timestep. The naive linear-stability bound
-`rep_wall*dt < 2` is NOT safe: (150, 0.0075) satisfies it and still sends the
-positions to NaN at layers = 1 from N0 = 300 up, because the spring switches on
-and off discontinuously at the contact point rather than acting as a linear
-restoring force. Measured safe: `rep_wall*dt <= 0.75`, verified at layers = 1 up
-to N0 = 750 (z-spread 0.139, i.e. still one cell thick).
-Use scripts/probe_stability.jl if you change rep_wall.
+	:constant       the original: constant force 30 while a cell overlaps a plate
+	:hookean        July: spring; (150, dt 0.005) at 1 layer, (60, dt 0.015) otherwise
+	:hookean_stiff  spring 150 at every thickness, dt 0.005
+	:rigid          no motion out through a plate; dt 0.015
+
+The Hookean spring is only stable for rep_wall * dt <= ~0.75 (measured in July),
+hence the smaller time step whenever it is stiff.
 """
-wall_settings(layers) = layers <= 1 ? (150.0, 0.005) : (60.0, 0.015);
+function wall_settings(layers, wall = :rigid)
+	wall == :constant      && return (1, 30.0, 0.015)
+	wall == :hookean       && return layers <= 1 ? (2, 150.0, 0.005) : (2, 60.0, 0.015)
+	wall == :hookean_stiff && return (2, 150.0, 0.005)
+	wall == :rigid         && return (3, 0.0, 0.015)
+	error("unknown wall $wall")
+end;
 
 """
-	run_confined(layers, N0; tf = 625.0, seed = 2345, fscale = 1.0,
-	             mu_ = MU_SET, fatt_ = FATT_SET, frep_ = FREP_SET,
-	             outdir = "coms", save_every = 40.0)
+	run_confined(layers, N0; pset = "july", wall = :rigid, fB = 0.6, width = 0.0, f_in = nothing, c_core = 0.0, lambda_scale = 1.0,
+	             lambda_wall = 0.0, tf = 625.0, fB_stop = nothing, seed = 2345, outdir = "coms",
+	             save_every = 15.0, verbose = true)
 
-Grow `N0` cells inside the plates, seed the A,B core, differentiate for `tf`,
-and save the trajectory with `save_frames`. Returns `(file, timeline, verdict)`.
+Your Initialization + Differentiation cells as one function, so a sweep does not
+depend on the notebook's global state: grow N0 cells between the plates, relax
+under the B/C mechanics, seed the B core (initialize_diff!), differentiate for tf
+(or until fB_stop), and save the trajectory with save_frames -- one frame every
+`save_every` time units (15 = one hour).
 
-`fscale` multiplies `fatt_` — the island-size dial. At `layers = 1`, `N0 = 500`:
-x0.70 loose porous patches, x1.00 compact stable islands, x1.40 one blob.
+`lambda_scale` multiplies the friction lambda (and alpha_ecm = 0.9 lambda with it) after
+growth: the mechanics run slower against division and differentiation (Oct 8 test).
+`width` / `f_in` dilute the B core and `c_core` mixes C cells into it (see
+initialize_diff!).
+`lambda_wall` > 0 adds friction with the plates (extra in-plane drag on cells
+touching a plate) from the relaxation onwards; growth is always frictionless.
+
+Returns (file, m1, timeline, verdict, secs); m1 is the frame right after seeding.
 """
-function run_confined(layers, N0; tf = 625.0, seed = 2345, fscale = 1.0,
-		mu_ = MU_SET, fatt_ = FATT_SET, frep_ = FREP_SET,
-		outdir = "coms", save_every = 40.0, verbose = true)
+function run_confined(layers, N0; pset = "july", wall = :rigid, fB = 0.6, width = 0.0, f_in = nothing, c_core = 0.0, lambda_scale = 1.0,
+		lambda_wall = 0.0, tf = 625.0, fB_stop = nothing, seed = 2345, outdir = "coms",
+		save_every = 15.0, verbose = true)
 
-	rw, dtd = wall_settings(layers)
+	wt, rw, dtd = wall_settings(layers, wall)
 	Lgap = (1.05*2.0)*layers
-	tag  = @sprintf("L%.1f_N%d_f%.2f_s%d", layers, N0, fscale, seed)
+	P = PSETS[pset]
+	core = f_in === nothing ? @sprintf("w%g", width) : @sprintf("fin%g", f_in)
+	fB == 0.6 || (core *= @sprintf("_fB%g", fB))
+	c_core > 0 && (core *= @sprintf("_cc%g", c_core))
+	lambda_scale == 1 || (core *= @sprintf("_lam%g", lambda_scale))
+	name = @sprintf("L%g_N%d_%s_%s_%s%s_s%d", layers, N0, pset, wall, core,
+				   lambda_wall > 0 ? @sprintf("_lw%g", lambda_wall) : "", seed)
 
 	Random.seed!(seed)
 	c = Community(model, N = 1, dt = dt_tfm, simBox = [-200.0 200; -200 200; -200 200])
 	for (par, val) in pairs(parameters_tfm); c[par] = val; end
-	c.cell_state = 1
+	c.cell_state = 3
 	c.x = 0.0; c.y = 0.0; c.z = 0.0
 	c.vx = 0.0; c.vy = 0.0; c.vz = 0.0
 	c.t_div = 1
 	c.g_on = true; c.d_on = false
-	c.confinement = true; c.L = Lgap; c.rep_wall = rw
+	c.confinement = true; c.L = Lgap
+	c.rep_wall = rw; c.wall_type = wt; c.tau_wall = TAU_WALL; c.lambda_wall = 0.0
 	c.alpha_ecm = 0.9*c.lambda[1]
-	c.fA = 0.0
 	grow_size!(c, save_each_tfm, N0; show_progress = false)
 
 	for (par, val) in pairs(parameters_do); c[par] = val; end
+	lambda_scale == 1 || (c.lambda = lambda_scale * c.lambda[1])   # slower mechanics (Oct 8 test)
 	setfield!(c, :dt, dtd)
-	c.mu = mu_; c.f_att = fscale .* fatt_; c.f_rep = frep_
-	c.confinement = true; c.L = Lgap; c.rep_wall = rw
+	c.mu = P.mu; c.f_att = P.f_att; c.f_rep = P.f_rep
+	c.confinement = true; c.L = Lgap
+	c.rep_wall = rw; c.wall_type = wt; c.tau_wall = TAU_WALL; c.lambda_wall = lambda_wall
 	c.alpha_ecm = 0.9*c.lambda[1]
 
 	se = round(Int, save_every/dtd)
 	stabilize!(c, se, 100; show_progress = false)
-	initialize_diff!(c; g_on = true, cluster = true)
-	stabilize!(c, se, 25; show_progress = false)
+	initialize_diff!(c; g_on = true, fB = fB, width = width, f_in = f_in, confined = true, c_core = c_core)
 	m1 = length(c)
-	differentiate!(c, se, tf; show_progress = false)
+	stabilize!(c, se, 25; show_progress = false)
+	secs = @elapsed differentiate!(c, se, tf; fB_stop = fB_stop, show_progress = false)
 
-	file = save_frames(joinpath(outdir, "com_$(tag).jld2"), c)
+	file = save_frames(joinpath(outdir, "com_$(name).jld2"), c)
 
 	d  = load_frames(file)
 	tl = island_timeline(d, layers; from = m1, verbose = false)
 	v  = island_verdict(tl)
 	if verbose
 		e = tl[end]
-		@printf("%-28s -> %-9s  n_isl=%d fmax=%.2f clust=%.2f fAB=%.3f  ",
-				tag, v, e.n_isl, e.frac_max, e.clustered, e.fAB)
+		@printf("%-40s -> %-9s  n_isl=%d fmax=%.2f clust=%.2f fB=%.3f  (%.0fs)  ",
+				name, v, e.n_isl, e.frac_max, e.clustered, e.fAB, secs)
 		confinement_report(d.z[end], Lgap)
 	end
-	(file = file, timeline = tl, verdict = v)
+	(file = file, m1 = m1, timeline = tl, verdict = v, secs = secs)
 end;
 
 """
 	phase_scan(layers_v, N0_v; kw...)
 
-`run_confined` over a grid, tabulated. This is the layers-vs-N0 phase diagram:
-below a critical N0 the A,B mass stays one central blob, above it breaks into
-islands, and the critical N0 grows with the number of layers.
-
-Measured (seed 2345, tf 625, fscale 1.0): islands from N0 = 500 / 1700 / 2500 /
-4000 at layers = 1 / 2 / 3 / 4; one blob at 750 / 1700 / 2500 respectively.
+`run_confined` over a grid of layers and N0, tabulated (rough version; the
+phase space of stage 5 replaces it).
 """
 function phase_scan(layers_v, N0_v; kw...)
 	rows = NamedTuple[]
@@ -1048,78 +1887,73 @@ function phase_scan(layers_v, N0_v; kw...)
 	rows
 end;
 
-# ---- notebook cell b3813774 ----------------------------------------------------
-# --- why the threshold moves with the number of layers -------------------------
-#
-# Break-up is NOT set by cell number, it is set by the ASPECT RATIO of the A,B
-# domain. The domain is a flat disc of thickness h (the slab) and in-plane
-# diameter D, and like a liquid sheet it only breaks up once it is wide enough
-# relative to its thickness.
-#
-# Measured with the unified set (f_att x1.00), taking the largest D/h each run
-# reached while the domain was still one piece:
-#
-#     layers 4, N0 2500   D/h 3.16   one blob
-#     layers 3, N0 1700   D/h 4.08   one blob
-#     layers 2, N0  750   D/h 4.75   one blob
-#     layers 4, N0 4000   D/h 5.04   ISLANDS
-#     layers 3, N0 2500   D/h 5.83   ISLANDS
-#     layers 2, N0 1700   D/h 9.13   ISLANDS
-#     layers 1, N0  500   D/h 16.9   ISLANDS
-#
-# so the threshold is D/h ~ 5. (At f_att x0.45 it was ~3.4: stronger adhesion
-# holds the domain together to a wider aspect ratio. Recalibrate with
-# `aspect_report` if you change the adhesion scale.)
-#
-# In cell counts. The domain holds n_AB cells in h/2r layers, so
-#     D = 4*sqrt( n_AB * 2r / (h*pi) )   =>   D/h = 5  <=>  n_AB ~ 22 * layers^3
-# which predicts 22 / 173 / 583 / 1382 cells for layers = 1..4. That separates
-# every run above: the blobs peaked at 181, 422 and 596 cells, the islands ran
-# at 906, 945 and 1474.
-#
-# THE h^3 IS THE EXPERIMENTAL RULE. "If we increase the number of layers, then we
-# need to increase the number of cells in order to get patterns" -- and the
-# coefficient is now predictable rather than fitted. The corresponding N0 at
-# squeezing is larger than n_AB and depends on how much the aggregate grows
-# before the readout; measured brackets are in the phase table.
+# ---- notebook cell 5e7c1a90 ----------------------------------------------------
+# --- one unconfined run end to end: the polarisation check -------------------------
 
 """
-	ab_domain_aspect(x, y, z, s; cut = 2.6)
+	run_unconfined(N0 = 500; pset = "july", fB = 0.6, width = 0.0, f_in = nothing, c_core = 0.0, lambda_scale = 1.0, tf = 700.0,
+	               fB_stop = nothing, seed = 2345, outdir = "coms",
+	               save_every = 15.0, show_progress = false, verbose = true)
 
-`(D, h, ratio, n_big)` for the largest A,B domain in one frame: equivalent-disc
-in-plane diameter `D`, slab thickness `h`, and `D/h`.
+Grow a free aggregate, seed a SPHERICAL B core (initialize_diff! with
+confined = false), differentiate, save, and print how far the B centroid moves
+from the centre (polar_stats: offset ~0 = central core, -> 1 = at one pole).
+
+`lambda_scale` multiplies the friction lambda (and alpha_ecm = 0.9 lambda with it) after
+growth: the mechanics run slower against division and differentiation (Oct 8 test).
+`width` / `f_in` dilute the B core, `c_core` mixes C into it (see initialize_diff!);
+verbose = false skips the table.
+
+show_progress = false by default: differentiate!'s progress display calls
+IJulia.clear_output and plot_pancake, which only exist inside Jupyter.
 """
-function ab_domain_aspect(x, y, z, s; cut = 2.6)
-	sel = findall(i -> s[i] == 1 || s[i] == 2, eachindex(s))
-	isempty(sel) && return (D = NaN, h = NaN, ratio = NaN, n_big = 0)
-	h  = quantile(z, 0.99) - quantile(z, 0.01) + 2.0
-	cs = cluster_sizes(x[sel], y[sel], z[sel], cut)
-	nbig = cs[1]
-	per_layer = nbig / max(h/2.1, 1.0)
-	D = 2 * sqrt(per_layer/pi) * 2.0
-	(D = D, h = h, ratio = D/h, n_big = nbig)
-end;
+function run_unconfined(N0 = 500; pset = "july", fB = 0.6, width = 0.0, f_in = nothing, c_core = 0.0, lambda_scale = 1.0, tf = 700.0,
+		fB_stop = nothing, seed = 2345, outdir = "coms", save_every = 15.0,
+		show_progress = false, verbose = true)
 
-"Predicted A,B domain size at break-up, from the D/h threshold."
-nAB_threshold(layers; ratio = 5.0, r = 1.0) =
-	(ratio/4)^2 * pi * (2.1*layers*r)^3 / (2r);
+	P = PSETS[pset]
+	core = f_in === nothing ? @sprintf("w%g", width) : @sprintf("fin%g", f_in)
+	fB == 0.6 || (core *= @sprintf("_fB%g", fB))
+	c_core > 0 && (core *= @sprintf("_cc%g", c_core))
+	lambda_scale == 1 || (core *= @sprintf("_lam%g", lambda_scale))
+	name = @sprintf("free_N%d_%s_%s_s%d", N0, pset, core, seed)
 
-"""
-	aspect_report(d, layers)
+	Random.seed!(seed)
+	c = Community(model, N = 1, dt = dt_tfm, simBox = [-150.0 150; -150 150; -150 150])
+	for (par, val) in pairs(parameters_tfm); c[par] = val; end
+	c.cell_state = 3
+	c.x = 0.0; c.y = 0.0; c.z = 0.0
+	c.vx = 0.0; c.vy = 0.0; c.vz = 0.0
+	c.t_div = 1
+	c.g_on = true; c.d_on = false
+	c.confinement = false; c.L = 4.2; c.rep_wall = 60; c.wall_type = 2; c.tau_wall = TAU_WALL
+	c.alpha_ecm = 0.9*c.lambda[1]
+	grow_size!(c, save_each_tfm, N0; show_progress = show_progress)
 
-`D/h` frame by frame alongside the island classification, so you can read off
-the aspect ratio at which THIS parameter set breaks up.
-"""
-function aspect_report(d, layers; from = 1)
-	@printf("%7s %7s %7s %7s %7s  %s\n", "t", "n_big", "D", "h", "D/h", "class")
-	for k in from:length(d.x)
-		x, y, z, s = d.x[k], d.y[k], d.z[k], d.cell_state[k]
-		a = ab_domain_aspect(x, y, z, s)
-		cls = classify_islands(island_stats(x, y, z, s, layers))
-		@printf("%7.0f %7d %7.1f %7.2f %7.2f  %s\n", d.t[k], a.n_big, a.D, a.h, a.ratio, cls)
+	for (par, val) in pairs(parameters_do); c[par] = val; end
+	lambda_scale == 1 || (c.lambda = lambda_scale * c.lambda[1])   # slower mechanics (Oct 8 test)
+	setfield!(c, :dt, 0.015)
+	c.mu = P.mu; c.f_att = P.f_att; c.f_rep = P.f_rep
+	c.confinement = false
+	c.alpha_ecm = 0.9*c.lambda[1]
+
+	se = round(Int, save_every/0.015)
+	stabilize!(c, se, 100; show_progress = show_progress)
+	initialize_diff!(c; g_on = true, fB = fB, width = width, f_in = f_in, confined = false, c_core = c_core)
+	m1 = length(c)
+	secs = @elapsed differentiate!(c, se, tf; fB_stop = fB_stop, show_progress = show_progress)
+
+	file = save_frames(joinpath(outdir, "com_$(name).jld2"), c)
+	d = load_frames(file)
+	if verbose
+		@printf("%7s %6s %7s %7s %7s\n", "t", "fB", "offset", "r_B", "r_C")
+		for k in m1:length(d.x)
+			st = polar_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k])
+			@printf("%7.0f %6.3f %7.3f %7.3f %7.3f\n", d.t[k], st.fAB, st.offset, st.r_AB, st.r_C)
+		end
 	end
+	(file = file, frames = d, m1 = m1, secs = secs)
 end;
-
 
 # ---- notebook cell ff3415f8 ----------------------------------------------------
 # --- phase diagram ------------------------------------------------------------
@@ -1211,13 +2045,10 @@ model_new = ABM(3,
 		:sigma_div => Float64,
 		:olap => Float64,
 		:g_on => Bool,
-		# Differentiation
+		# Differentiation: B -> C only. There are no A cells, so the A -> B rate p,
+		# the feedback strength k and the A fraction it needed are gone.
 		:d_on => Bool,
-		:b => Float64,
-		:p => Float64,
 		:q => Float64,
-		:k => Float64,
-		:fA => Float64,			# live fraction of A cells, pushed in by the caller
 		# Reference values
 		:t0 => Float64,
 		:r0 => Float64,
@@ -1226,6 +2057,9 @@ model_new = ABM(3,
 		:confinement => Bool,
 		:L => Float64,
 		:rep_wall => Float64,
+		:wall_type => Int64,		# 1 constant force, 2 Hookean, 3 rigid -- see wall_settings
+		:tau_wall => Float64,		# rigid plates only: time to undo an overshoot
+		:lambda_wall => Float64,	# extra in-plane drag on cells touching a plate (0 = frictionless)
 	),
 
 
@@ -1233,7 +2067,7 @@ model_new = ABM(3,
 	agent = Dict(
 		:t_div => Float64,
 		:ni => Int64,
-		:cell_state => Int64,
+		:cell_state => Int64,		# 2 = B (T/Bra+), 3 = C (T/Bra-); 1 (A) is never created
 		:r => Float64,
 		# Mechanics
 		:vx => Float64,
@@ -1242,10 +2076,6 @@ model_new = ABM(3,
 		:fx => Float64,
 		:fy => Float64,
 		:fz => Float64,
-		# Differentiation
-		:ni_a => Float64,
-		:r_ab => Float64,
-		:r_bc => Float64,
 	),
 
 
@@ -1292,52 +2122,65 @@ model_new = ABM(3,
 			end
 		end
 
-		# Confinement: HOOKEAN plates.
-		# The previous version applied a CONSTANT force (fz += rep_wall) while
-		# the cell was inside the contact zone. A constant force has no stable
-		# fixed point there: it drives the cell until z >= r and then switches
-		# off. At layers = 1 the gap between "off at the bottom" and "on at the
-		# top" is only L - 2r = 0.1, while one restoring step moves the cell
-		# rep_wall*dt/(lambda*ni) ~ 0.075, so cells chattered across the gap and
-		# 93% of them ended up OUTSIDE the plates -- the "monolayer" was really
-		# ~1.95 cells thick, and that buckled sheet is why layers = 1 never
-		# produced islands. A spring vanishes at contact, so the contact point
-		# IS the fixed point, and it cannot be outrun by in-plane crowding.
-		# Stability: the restoring step is rep_wall*(pen/r)*dt/(lambda*ni), and
-		# for ni < 2 the code below drops the 1/ni. The linear bound that suggests
-		# is rep_wall*dt < 2, and it is NOT safe -- the spring switches on and off
-		# discontinuously at the contact point, so the linear analysis does not
-		# apply. (150, 0.0075) gives rep_wall*dt = 1.125 and still sends positions
-		# to NaN at layers = 1 from N0 = 300 up, surfacing as
-		#     InexactError: Int64(NaN)   (from the neighbour grid)
-		# MEASURED SAFE: rep_wall * dt <= 0.75
-		#     layers  = 1  -> rep_wall 150, dt 0.005   (checked up to N0 = 750)
-		#     layers >= 2  -> rep_wall  60, dt 0.015
-		# See wall_settings() and scripts/probe_stability.jl.
+		# Confinement between two plates at z = 0 and z = L. Three models, compared
+		# in reports/REPORT.md (stage 2):
+		#   wall_type 1  constant force while the cell overlaps a plate (the original)
+		#   wall_type 2  Hookean: force grows with the overlap (July)
+		#   wall_type 3  rigid: no motion out through a plate (applied to vz below)
 		if confinement
-			if z < r
-				fz += rep_wall * (r - z) / r
+			if wall_type == 1
+				if z < r
+					fz += rep_wall
+				end
+				diz_top = L - z
+				if diz_top < r
+					fz -= rep_wall
+				end
+			elseif wall_type == 2
+				if z < r
+					fz += rep_wall * (r - z) / r
+				end
+				diz_top = L - z
+				if diz_top < r
+					fz -= rep_wall * (r - diz_top) / r
+				end
 			end
+		end
 
-			diz_top = L - z
-			if diz_top < r
-				fz -= rep_wall * (r - diz_top) / r
-			end
+		# Plate friction (optional, off when lambda_wall = 0): a cell touching a
+		# plate feels an extra drag lambda_wall on its in-plane motion.
+		wall_drag = 0.0
+		if confinement && (z < r + 0.05 || z > L - r - 0.05)
+			wall_drag = lambda_wall
 		end
 
 		# Equations of motion
 		ni_relv_min = 2
 		if ni < ni_relv_min
 			inv = 1 / lambda
-			vx = inv * fx
-			vy = inv * fy
+			inv_xy = 1 / (lambda + wall_drag)
+			vx = inv_xy * fx
+			vy = inv_xy * fy
 			vz = inv * fz
 		else
 			inv = 1 / (lambda * ni)
-			vx = inv * (fx + vsum_x*alpha_ecm)
-			vy = inv * (fy + vsum_y*alpha_ecm)
+			inv_xy = 1 / (lambda * ni + wall_drag)
+			vx = inv_xy * (fx + vsum_x*alpha_ecm)
+			vy = inv_xy * (fy + vsum_y*alpha_ecm)
 			vz = inv * (fz + vsum_z*alpha_ecm)
 		end
+
+		# Rigid plates: a cell touching a plate cannot move further into it, and a
+		# small overshoot (at most one time step) is pulled back within tau_wall.
+		if confinement && wall_type == 3
+			if z < r
+				vz = max(vz, (r - z) / tau_wall)
+			end
+			if z > L - r
+				vz = min(vz, (L - r - z) / tau_wall)
+			end
+		end
+
 		dt(x) = vx
 		dt(y) = vy
 		dt(z) = vz
@@ -1381,39 +2224,17 @@ model_new = ABM(3,
 			end
 		end
 
-		# Differentiation
-		if d_on == true && cell_state != 3
-			# ni_a is the GLOBAL fraction of A cells. It used to be written as
-			#     ni_a = count(==(1), com.cell_state) / com.N
-			# but `com` inside this quote is not the community passed to
-			# agentStepRule! -- the generated kernel resolves it as a global
-			# lookup in Main. Evolving a community under any other name (or a
-			# deepcopy taken while `com` still pointed at the grown, all-type-1
-			# aggregate) made ni_a come out 1.0, so 1 + k*ni_a = 6 and BOTH
-			# differentiation rates ran 6x too slow. It was also O(N) work per
-			# agent per step, i.e. O(N^2) per step.
-			# Now it is a model parameter that the stepping loops refresh once
-			# per step (see push_fA! in grow_size!/stabilize!/differentiate!).
-			ni_a = fA
+		# Differentiation: B -> C at the constant rate q (no feedback)
+		if d_on == true && cell_state == 2
 			ran = CBMDistributions.uniform(0, 1)
-
-			if cell_state == 1
-				r_ab = p / (1 + k * ni_a)
-				if ran < r_ab * dt
-					cell_state = 2
-				end
-
-			elseif cell_state == 2
-				r_bc = q / (1 + k * ni_a)
-				if ran < r_bc * dt
-					cell_state = 3
-				end
+			if ran < q * dt
+				cell_state = 3
 			end
 		end
 
-	end, 
-	
-	
+	end,
+
+
 	agentAlg = CBMIntegrators.Heun(),
 	neighborsAlg = CBMNeighbors.CellLinked(cellEdge = 10.0),
 );
@@ -1429,9 +2250,9 @@ parameters_tfm = Dict(
 	:tau_div => 5 * [1, 1, 1],
 	:sigma_div => 0.5,
 	:olap => 0.75,
-	:p => 0.25,
+	# :p => 0.25,		# removed: no A cells in the B/C model
 	:q => 0.125,
-	:k => 4.76,
+	# :k => 4.76,		# removed: no differentiation feedback
 	:f_rep => 2.5 * [1 1 1; 1 1 1 ; 1 1 1],
 	:f_att => 		[1 1 1; 1 1 1 ; 1 1 1],
 	:t0 => 2,
@@ -1456,9 +2277,9 @@ parameters_do = Dict(
 	:tau_div => [300, 300, 750],	# changes
 	:sigma_div => 0.5,	
 	:olap => 0.3,			# changes
-	:p => 0.009333,			# changes
+	# :p => 0.009333,		# removed: no A cells in the B/C model
 	:q => 0.004667,			# changes
-	:k => 5,			# changes
+	# :k => 5,			# removed: no differentiation feedback
 	# changes
 	:f_rep =>
         [3 3 3 ; 
@@ -1474,75 +2295,3 @@ parameters_do = Dict(
 );
 dt_do = 0.015;
 save_each_do = round(Int64, 1 / dt_do);
-
-# ---- notebook cell f3b763eb ----------------------------------------------------
-# UNCONFINED POLARISATION -- the sanity check that the island parameters are
-# reasonable. Set `confined = false` in the Initialization cell and re-run from
-# there, or call the self-contained version below.
-#
-# With the unified set (N0 = 300, tf = 700) the A,B centroid ends ~0.85 aggregate
-# radii off centre with r_AB > r_C, i.e. A,B segregated to one pole and sitting
-# at the surface, C on the other side. `offset` is still climbing at the end of
-# the run, so a longer tf gives a more completely separated state.
-
-function run_unconfined(N0 = 300; tf = 700.0, seed = 2345, fscale = 1.0,
-		mu_ = MU_SET, fatt_ = FATT_SET, frep_ = FREP_SET,
-		outdir = "coms", save_every = 40.0, show_progress = false)
-
-	Random.seed!(seed)
-	c = Community(model, N = 1, dt = dt_tfm, simBox = [-150.0 150; -150 150; -150 150])
-	for (par, val) in pairs(parameters_tfm); c[par] = val; end
-	c.cell_state = 1
-	c.x = 0.0; c.y = 0.0; c.z = 0.0
-	c.vx = 0.0; c.vy = 0.0; c.vz = 0.0
-	c.t_div = 1
-	c.g_on = true; c.d_on = false
-	c.confinement = false; c.L = 4.2; c.rep_wall = 60
-	c.alpha_ecm = 0.9*c.lambda[1]
-	c.fA = 0.0
-	grow_size!(c, save_each_tfm, N0; show_progress = show_progress)
-
-	for (par, val) in pairs(parameters_do); c[par] = val; end
-	setfield!(c, :dt, 0.015)
-	c.mu = mu_; c.f_att = fscale .* fatt_; c.f_rep = frep_
-	c.confinement = false
-	c.alpha_ecm = 0.9*c.lambda[1]
-
-	se = round(Int, save_every/0.015)
-	stabilize!(c, se, 100; show_progress = show_progress)
-	# NOTE the core is seeded as a SPHERE here, not the cylinder used when
-	# confined: unconfined the aggregate is a ball, so a ball-shaped core is
-	# what squeezing would have produced.
-	xc, yc, zc = mean(c.x), mean(c.y), mean(c.z)
-	rho = sqrt.((c.x .- xc).^2 .+ (c.y .- yc).^2 .+ (c.z .- zc).^2)
-	r_agg = quantile(rho, 0.98)
-	c.cell_state .= 3
-	idx = shuffle!(findall(i -> rho[i] < 0.8*r_agg, eachindex(rho)))
-	nb = round(Int, 0.75*length(idx)); na = round(Int, 0.15*length(idx))
-	c.cell_state[idx[1:nb]] .= 2
-	c.cell_state[idx[nb+1:min(nb+1+na, length(idx))]] .= 1
-	c.g_on = true; c.d_on = true
-	setfield!(c, :t, 0.0)
-	for i in 1:c.N[1]
-		sr = 2*c.tau_div[c.cell_state[i]]*c.sigma_div[] + c.dt[1]
-		c.t_div[i] = CBMDistributions.uniform(c.dt[1], sr)
-	end
-	saveRAM!(c)
-	m1 = length(c)
-	# show_progress = false by default: differentiate!'s progress display calls
-	# IJulia.clear_output and plot_pancake, neither of which exists in a plain
-	# `julia script.jl` session.
-	differentiate!(c, se, tf; show_progress = show_progress)
-
-	file = save_frames(joinpath(outdir, "polar_N$(N0)_f$(fscale).jld2"), c)
-	d = load_frames(file)
-	@printf("%7s %6s %7s %7s %7s\n", "t", "fAB", "offset", "r_AB", "r_C")
-	for k in m1:length(d.x)
-		st = polar_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k])
-		@printf("%7.0f %6.3f %7.3f %7.3f %7.3f\n", d.t[k], st.fAB, st.offset, st.r_AB, st.r_C)
-	end
-	(file = file, frames = d, m1 = m1)
-end;
-
-# res = run_unconfined(300);
-# plot_frames(res.frames, color_map, round.(Int, range(res.m1, length(res.frames.x), length=6)))

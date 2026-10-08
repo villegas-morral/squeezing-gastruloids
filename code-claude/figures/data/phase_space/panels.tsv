@@ -1,0 +1,5 @@
+panel	layers	N0	views	label	file
+central	4	600	top+side	central cluster|4 layers, N0 600, fB 0.2	inset_central.csv
+pattern	1	600	top+side	pattern|1 layer, N0 600, fB 0.2	inset_pattern.csv
+pattern_thick	3	2400	top+side	pattern|3 layers, N0 2400, fB 0.2	inset_pattern_thick.csv
+polarised	8	300	top+side	polarised|8 layers, N0 300, fB 0.2	inset_polarised.csv

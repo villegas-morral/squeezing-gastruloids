@@ -146,6 +146,504 @@ function plot_pancake_frames(d, color_map, ks;
 	fig
 end;
 
+# ---- notebook cell 6b8e0c35 ----------------------------------------------------
+# --- 3D gallery: several runs and/or frames side by side ----------------------------
+
+"""
+	plot_gallery(panels; ncol = length(panels), views = (:top, :side), cut_top = true,
+	             size_ratio = 0.7, labelsize = 22, title = nothing,
+	             filename = "gallery", savefig = false)
+
+3D panels in the plot_pancake look (Axis3 + meshscatter, C drawn first), for
+several runs and/or frames at once. `panels` is a vector of NamedTuples
+(d, k, label): d from load_frames, k the frame to draw, label the panel title.
+Each panel gets one row per entry of `views`:
+
+	:top    seen from above; with cut_top the cells above the mid-plane are
+	        dropped (a cutaway), otherwise the C roof hides the B cells
+	:side   seen from the side, all cells (shows the slab thickness)
+"""
+function plot_gallery(panels; ncol = length(panels), views = (:top, :side), cut_top = true,
+		size_ratio = 0.7, labelsize = 22, title = nothing,
+		filename = "gallery", savefig = false)
+	nv = length(views)
+	nrow = cld(length(panels), ncol)
+	toff = title === nothing ? 0 : 1
+	fig = Figure(size = (round(Int, 520*size_ratio*ncol),
+						 round(Int, 470*size_ratio*nv*nrow) + 70*toff), figure_padding = 20)
+	title === nothing || Label(fig[1, 1:ncol], title; fontsize = labelsize + 6, font = :bold)
+	for (p, pan) in enumerate(panels)
+		rb, cc = divrem(p - 1, ncol)
+		x, y, z, r, s = pan.d.x[pan.k], pan.d.y[pan.k], pan.d.z[pan.k], pan.d.r[pan.k], pan.d.cell_state[pan.k]
+		xc, yc, zc = mean(x), mean(y), mean(z)
+		bs = max(maximum(x) - minimum(x), maximum(y) - minimum(y)) / 2 + 2.0   # + margin: cells are not clipped
+		for (jv, v) in enumerate(views)
+			keep = (v == :top && cut_top) ? findall(w -> w <= zc + 0.2, z) : collect(eachindex(z))
+			ax = Axis3(fig[toff + rb*nv + jv, cc + 1], aspect = :data, azimuth = 0,
+				elevation = v == :top ? pi/2 : 2*pi + pi/32,
+				xlabel = "", ylabel = "", zlabel = "",
+				xgridvisible = false, ygridvisible = false, zgridvisible = false,
+				xspinesvisible = false, yspinesvisible = false, zspinesvisible = false,
+				xticksvisible = false, yticksvisible = false, zticksvisible = false,
+				xticklabelsvisible = false, yticklabelsvisible = false, zticklabelsvisible = false,
+				titlevisible = jv == 1, title = pan.label, titlesize = labelsize, titlegap = 4)
+			o = sort(keep; by = m -> s[m], rev = true)     # draw C first
+			meshscatter!(ax, x[o] .- xc, y[o] .- yc, z[o] .- zc;
+				markersize = r[o], color = [color_map[s[m]] for m in o])
+			xlims!(ax, -bs, bs); ylims!(ax, -bs, bs); zlims!(ax, -bs, bs)
+		end
+	end
+	title === nothing || rowgap!(fig.layout, 1, 60)     # room between the title and the panel labels
+	savefig && save("$(filename).png", fig)
+	fig
+end;
+
+# ---- notebook cell a7f3c2d1 ----------------------------------------------------
+# --- final figures: 3D panels, the data behind them, the phase space, movies -------
+#
+# Every final figure can be redrawn from code-claude/figures/data alone, without
+# re-running anything (replot_figures). Per figure, data/<figure>/ holds
+#
+#   title.txt       the figure title
+#   panels.tsv      one row per panel: panel, row, col, views, label, file
+#                   (tab-separated; "|" in a label is a line break)
+#   <panel>.csv     one row per cell: x, y, z, r, cell_state -- the frame shown
+#   <panel>.jld2    the same arrays plus where they come from (meta: run, frame, t, fB)
+#
+# and the phase space has data/phase_space/phase_space.csv (one row per run) plus
+# its insets in panels.tsv, where the row and col columns hold the layers and N0 of
+# the run the inset comes from. reports/FIGURES.md says how each figure was made.
+
+PHASE_COLORS = Dict(                   # outcome classes of the phase space
+	"CENTRAL"   => Makie.to_color("#2a78d6"),  # blue
+	"PATTERN"   => Makie.to_color("#1baf7a"),  # aqua (ring or islands)
+	"POLARISED" => Makie.to_color("#eb6834"),  # orange
+	"OTHER"     => Makie.to_color("#b4b2ab"),  # grey
+);
+
+"The phase-space class of a classify_pattern outcome: rings and islands are both PATTERN."
+phase_class(c) = c in ("RING", "ISLANDS") ? "PATTERN" : c in ("CENTRAL", "POLARISED") ? c : "OTHER";
+
+"""
+	save_panel(dir, panel, x, y, z, r, s; meta...)
+
+Write the cells of one 3D panel as <panel>.csv (x, y, z, r, cell_state) and
+<panel>.jld2 (the same arrays plus `meta`, e.g. run = file, frame = k, t, fB).
+"""
+function save_panel(dir, panel, x, y, z, r, s; meta...)
+	mkpath(dir)
+	open(joinpath(dir, "$(panel).csv"), "w") do io
+		println(io, "x,y,z,r,cell_state")
+		for i in eachindex(x)
+			@printf(io, "%.4f,%.4f,%.4f,%.4f,%d\n", x[i], y[i], z[i], r[i], s[i])
+		end
+	end
+	jldsave(joinpath(dir, "$(panel).jld2"); x = x, y = y, z = z, r = r, cell_state = s,
+			meta = Dict(String(k) => v for (k, v) in meta))
+	"$(panel).csv"
+end;
+
+"Read a panel written by save_panel: (x, y, z, r, cell_state)."
+function load_panel(file)
+	raw = readdlm(file, ','; header = true)[1]
+	(x = Float64.(raw[:, 1]), y = Float64.(raw[:, 2]), z = Float64.(raw[:, 3]),
+	 r = Float64.(raw[:, 4]), cell_state = Int.(raw[:, 5]))
+end;
+
+"""
+	draw_cells!(pos, c; view = :top, cut_top = true, label = "", labelsize = 18, bs = nothing)
+
+One 3D panel in the plot_pancake look (Axis3 + meshscatter) at the figure position
+`pos`, for the cells `c` (anything with x, y, z, r, cell_state):
+
+	:top      seen from above; with cut_top the cells above the mid-plane are left
+	          out (a cutaway), otherwise the C roof hides the B cells
+	:side     seen from the side, all cells (shows the slab thickness)
+	:front    the side view turned by 90 degrees (x runs left to right)
+	:oblique  a three-quarter view from above, all cells
+
+`bs` is the half-width of the box (default: fits the aggregate).
+"""
+function draw_cells!(pos, c; view = :top, cut_top = true, label = "", labelsize = 18, bs = nothing)
+	x, y, z, r, s = c.x, c.y, c.z, c.r, c.cell_state
+	xc, yc, zc = mean(x), mean(y), mean(z)
+	bs = bs === nothing ? max(maximum(x) - minimum(x), maximum(y) - minimum(y)) / 2 + 2.0 : bs
+	keep = (view == :top && cut_top) ? findall(w -> w <= zc + 0.2, z) : collect(eachindex(z))
+	ax = Axis3(pos, aspect = :data,
+		azimuth = view == :oblique ? pi/4 : view == :front ? pi/2 : 0,
+		elevation = view == :top ? pi/2 : view in (:side, :front) ? 2*pi + pi/32 : pi/5,
+		xlabel = "", ylabel = "", zlabel = "",
+		xgridvisible = false, ygridvisible = false, zgridvisible = false,
+		xspinesvisible = false, yspinesvisible = false, zspinesvisible = false,
+		xticksvisible = false, yticksvisible = false, zticksvisible = false,
+		xticklabelsvisible = false, yticklabelsvisible = false, zticklabelsvisible = false,
+		titlevisible = !isempty(label), title = label, titlesize = labelsize, titlegap = 4)
+	o = sort(keep; by = m -> s[m], rev = true)     # draw C first
+	meshscatter!(ax, x[o] .- xc, y[o] .- yc, z[o] .- zc;
+		markersize = r[o], color = [color_map[s[m]] for m in o])
+	xlims!(ax, -bs, bs); ylims!(ax, -bs, bs); zlims!(ax, -bs, bs)
+	ax
+end;
+
+"""
+	plot_panels(dir; size_ratio = 0.6, labelsize = 18)
+
+A final 3D figure from its data folder (title.txt, panels.tsv, <panel>.csv). Each
+panel sits at (row, col) of panels.tsv and gets one axis row per view
+("top", "side", "front", "oblique", or several joined by "+").
+"""
+function plot_panels(dir; size_ratio = 0.6, labelsize = 18)
+	lines_ = filter(l -> !isempty(strip(l)), readlines(joinpath(dir, "panels.tsv")))
+	pans = [split(l, '\t') for l in lines_[2:end]]       # panel, row, col, views, label, file
+	views(p) = Symbol.(split(p[4], "+"))
+	nrow = maximum(parse(Int, p[2]) for p in pans)
+	ncol = maximum(parse(Int, p[3]) for p in pans)
+	# every figure row is as tall as its panel with the most views
+	nv = [maximum([length(views(p)) for p in pans if parse(Int, p[2]) == i]; init = 1) for i in 1:nrow]
+	start = cumsum(vcat(1, nv[1:end-1]))
+	title = isfile(joinpath(dir, "title.txt")) ? strip(read(joinpath(dir, "title.txt"), String)) : ""
+	toff = isempty(title) ? 0 : 1
+	# a side view is flat: an axis row with only side views gets 40 % of the height
+	h = round(Int, 470*size_ratio)
+	flat = [all(p -> parse(Int, p[2]) != i || length(views(p)) < jv || views(p)[jv] == :side, pans)
+			for i in 1:nrow for jv in 1:nv[i]]
+	fig = Figure(size = (round(Int, 520*size_ratio*ncol), sum(f ? round(Int, 0.4h) : h for f in flat) + 70*toff),
+				 figure_padding = 20)
+	# the title shrinks to fit a narrow figure
+	W = round(Int, 520*size_ratio*ncol)
+	isempty(title) || Label(fig[1, 1:ncol], title; fontsize = min(labelsize + 6, round(Int, 1.8W / length(title))), font = :bold)
+	for p in pans
+		row, col = parse(Int, p[2]), parse(Int, p[3])
+		c = load_panel(joinpath(dir, p[6]))
+		for (jv, v) in enumerate(views(p))
+			draw_cells!(fig[toff + start[row] + jv - 1, col], c; view = v,
+						label = jv == 1 ? replace(p[5], "|" => "\n") : "", labelsize = labelsize)
+		end
+	end
+	for (j, f) in enumerate(flat)
+		f && rowsize!(fig.layout, toff + j, Fixed(round(Int, 0.4h)))
+	end
+	isempty(title) || rowgap!(fig.layout, 1, 50)
+	fig
+end;
+
+"""
+	write_panels(dir, title, panels)
+
+Write a final figure's data folder. `panels` is a vector of NamedTuples
+(panel, row, col, views, label, cells, meta): cells has x, y, z, r, cell_state
+(e.g. one frame of load_frames), meta a NamedTuple saved in the .jld2.
+"""
+function write_panels(dir, title, panels)
+	mkpath(dir)
+	write(joinpath(dir, "title.txt"), title)
+	open(joinpath(dir, "panels.tsv"), "w") do io
+		println(io, "panel\trow\tcol\tviews\tlabel\tfile")
+		for p in panels
+			c = p.cells
+			f = save_panel(dir, p.panel, c.x, c.y, c.z, c.r, c.cell_state; p.meta...)
+			println(io, join((p.panel, p.row, p.col, p.views, replace(p.label, "\n" => "|"), f), '\t'))
+		end
+	end
+	dir
+end;
+
+PHASE_LABELS = Dict("CENTRAL" => "central cluster", "PATTERN" => "pattern (ring or islands)",
+					"POLARISED" => "polarised", "OTHER" => "other");
+
+"""
+	phase_space!(pos, rows; insets = NamedTuple[], free = NamedTuple[], title = "",
+	             x = :log, y = :layers, colors = PHASE_COLORS, background = 0.22, fontsize = 20,
+	             pie_scale = 1.0, region_labels = nothing, axis = (;))
+
+The chart of plot_phase_space, drawn at the figure position `pos` (so it can be
+composed into a bigger figure). Returns the axis.
+
+* `x`  :log      log10 N0, as in your sketch;  :linear  N0
+* `y`  :layers   the plate gap in cell layers;  :diameter  the pancake diameter at
+                 squeezing, in cell diameters (rows need D). Both on log axes.
+* `background`   opacity of the region colours
+* `pie_scale`    scales the pies (smaller for a sketch-like chart)
+* `region_labels` class => text, written in the middle of that class's region
+* `axis`         more Axis attributes (e.g. bbox, to place it by hand)
+"""
+function phase_space!(pos, rows; insets = NamedTuple[], free = NamedTuple[], title = "",
+		x = :log, y = :layers, colors = PHASE_COLORS, background = 0.22, fontsize = 20,
+		pie_scale = 1.0, region_labels = nothing, axis = (;))
+	order = ["CENTRAL", "PATTERN", "POLARISED", "OTHER"]
+	major(o) = order[argmax([count(==(c), o) for c in order])]
+	pts = unique([(Float64(r.layers), Int(r.N0)) for r in rows])
+	outc = Dict(p => [phase_class(r.class) for r in rows if (r.layers, r.N0) == p] for p in pts)
+	# a point sits at the mean pancake diameter of its seeds
+	Dm = y == :diameter ? Dict(p => mean(r.D for r in rows if (r.layers, r.N0) == p) for p in pts) : Dict()
+	# the unconfined runs: one more row above the thickest gap (layers = Inf)
+	for N in unique([r.N0 for r in free])
+		push!(pts, (Inf, N)); outc[(Inf, N)] = [phase_class(r.class) for r in free if r.N0 == N]
+	end
+	conf = filter(p -> isfinite(p[1]), pts)
+
+	# plot coordinates: N0 across 10 units, the confinement up 8, the free row at 9.4
+	fx(N) = x == :log ? log10(N) : float(N)
+	fy(p) = y == :layers ? log2(p[1]) : log2(Dm[p])
+	x0, x1 = x == :log ? (log10(minimum(last.(pts))), log10(maximum(last.(pts)))) : (0.0, float(maximum(last.(pts))))
+	y0, y1 = extrema(fy.(conf))
+	Yv(v) = 8 * (v - y0) / (y1 - y0)
+	X(N) = 10 * (fx(N) - x0) / (x1 - x0)
+	Y(p) = isfinite(p[1]) ? Yv(fy(p)) : 9.4
+	top = any(p -> !isfinite(p[1]), pts) ? 10.1 : 8.7
+
+	if x == :log
+		xt = filter(t -> x0 - 0.05 <= t <= x1 + 0.05, 1.5:0.5:4.5)
+		xticks = (10 .* (xt .- x0) ./ (x1 - x0), [@sprintf("%g", t) for t in xt]); xlabel = "log₁₀ N0 (cells at squeezing)"
+	else
+		xt = 0:1000:maximum(last.(pts))
+		xticks = (10 .* xt ./ x1, string.(xt)); xlabel = "N0 (cells at squeezing)"
+	end
+	if y == :layers
+		yt = sort(unique(first.(conf)))
+		yticks = (vcat(Yv.(log2.(yt)), top > 9 ? [9.4] : Float64[]), vcat([@sprintf("%g", L) for L in yt], top > 9 ? ["unconfined"] : String[]))
+		ylabel = "plate gap (cell layers)"
+	else
+		yt = filter(t -> 2.0^y0 / 1.1 <= t <= 2.0^y1 * 1.1, [4, 5, 7, 10, 15, 20, 30, 40, 60, 80, 120])
+		yticks = (vcat(Yv.(log2.(yt)), top > 9 ? [9.4] : Float64[]), vcat(string.(yt), top > 9 ? ["unconfined"] : String[]))
+		ylabel = "pancake diameter at squeezing (cell diameters)"
+	end
+	ax = Axis(pos; aspect = DataAspect(), title = title, titlesize = fontsize + 2,
+		xlabel = xlabel, ylabel = ylabel, xlabelsize = fontsize, ylabelsize = fontsize,
+		xticks = xticks, yticks = yticks, xgridvisible = false, ygridvisible = false,
+		xticklabelsize = fontsize - 4, yticklabelsize = fontsize - 4, axis...)
+	limits!(ax, -0.7, 10.7, -0.7, top)
+
+	# background: majority outcome of the nearest point
+	xs = range(-0.7, 10.7, length = 460); ys = range(-0.7, top, length = 400)
+	P = [(X(p[2]), Y(p)) for p in pts]
+	grid = [findfirst(==(major(outc[pts[argmin([(q[1] - u)^2 + (q[2] - v)^2 for q in P])]])), order) for u in xs, v in ys]
+	fade(c, a) = RGBAf(c.r, c.g, c.b, a)
+	heatmap!(ax, xs, ys, grid; colormap = cgrad([fade(colors[c], background) for c in order], length(order); categorical = true),
+			 colorrange = (0.5, length(order) + 0.5))
+	# the axis break between the plates and the unconfined row
+	top > 9 && poly!(ax, Rect2f(-0.7, 8.55, 11.4, 0.3); color = :white)
+
+	# thresholds, per number of layers (the unconfined row included)
+	for (which, style) in (("PATTERN", :dash), ("POLARISED", :dot))
+		tx = Float64[]; ty = Float64[]
+		for L in sort(unique(first.(pts)))
+			row = sort(filter(p -> p[1] == L, pts); by = last)
+			m = [major(outc[p]) == which for p in row]
+			if which == "PATTERN"     # patterns from some N0 on, up to the largest
+				i = findlast(!, m)                     # the last N0 without a pattern
+				i == length(row) && continue
+				i === nothing ? (push!(tx, max(X(row[1][2]) - 0.5, -0.3)); push!(ty, Y(row[1]))) :
+					(push!(tx, (X(row[i][2]) + X(row[i+1][2])) / 2); push!(ty, (Y(row[i]) + Y(row[i+1])) / 2))
+			else                      # polarised up to some N0
+				i = findfirst(!, m)                    # the first N0 that does not polarise
+				i == 1 && continue
+				i === nothing ? (push!(tx, min(X(row[end][2]) + 0.5, 10.3)); push!(ty, Y(row[end]))) :
+					(push!(tx, (X(row[i-1][2]) + X(row[i][2])) / 2); push!(ty, (Y(row[i-1]) + Y(row[i])) / 2))
+			end
+		end
+		length(tx) >= 1 && lines!(ax, tx, ty; color = colors[which], linewidth = 3, linestyle = style)
+		length(tx) >= 1 && scatter!(ax, tx, ty; color = colors[which], markersize = 9)
+	end
+
+	# one pie per point: the seeds' outcomes; smaller where points crowd
+	rad = Dict(p => pie_scale * clamp(0.45 * minimum([hypot(X(p[2]) - X(q[2]), Y(p) - Y(q)) for q in pts if q != p]; init = 1.0), 0.13, 0.42)
+			   for p in pts)
+	for p in pts
+		o = outc[p]; n = length(o); a0 = pi/2; cx, cy = X(p[2]), Y(p)
+		for c in order
+			k = count(==(c), o); k == 0 && continue
+			a1 = a0 - 2pi * k / n
+			th = range(a0, a1, length = max(2, ceil(Int, 40 * k / n)))
+			poly!(ax, Point2f[(cx, cy); [(cx + rad[p]*cos(t), cy + rad[p]*sin(t)) for t in th]];
+				  color = colors[c], strokecolor = :white, strokewidth = k == n ? 0 : 1.5)
+			a0 = a1
+		end
+	end
+
+	# region names, below the unconfined row: inside each region (the whole text width
+	# within it), at the spot farthest from any pie and from the names already placed,
+	# pulled a little towards the middle of the region
+	if region_labels !== nothing
+		placed = Tuple{Float64,Float64}[]
+		for c in order
+			haskey(region_labels, c) || continue
+			txt = region_labels[c]; k = findfirst(==(c), order)
+			hw = 0.12 * length(txt)              # about half the text width
+			di = ceil(Int, hw / step(xs)); dj = ceil(Int, 0.3 / step(ys))
+			inside(i, j) = all(grid[clamp(i + a, 1, length(xs)), clamp(j + b, 1, length(ys))] == k
+							   for a in (-di, 0, di), b in (-dj, 0, dj))
+			in_ = [(u, v) for (i, u) in enumerate(xs), (j, v) in enumerate(ys)
+				   if grid[i, j] == k && hw - 0.5 < u < 10.5 - hw && 0 < v < 8.2 && inside(i, j)]
+			isempty(in_) && continue
+			m = (mean(first.(in_)), mean(last.(in_)))
+			score(q) = min(minimum(hypot(q[1] - P_[1], q[2] - P_[2]) for P_ in P),
+						   minimum((hypot((q[1] - p_[1]) / 3, q[2] - p_[2]) for p_ in placed); init = Inf)) -
+					   0.15hypot(q[1] - m[1], q[2] - m[2])
+			at = in_[argmax(score.(in_))]
+			push!(placed, at)
+			cc = colors[c]
+			text!(ax, at...; text = txt, align = (:center, :center), fontsize = fontsize + 1,
+				  font = :bold, color = RGBf(0.5cc.r, 0.5cc.g, 0.5cc.b))
+		end
+	end
+
+	# the insets' letters at their points
+	for (i, ins) in enumerate(insets)
+		p = (ins.layers, ins.N0); haskey(outc, p) || continue
+		text!(ax, X(p[2]) + rad[p] + 0.06, Y(p) + rad[p]; text = string('A' + i - 1), fontsize = fontsize + 2,
+			  font = :bold, align = (:left, :bottom))
+	end
+	ax
+end;
+
+"""
+	plot_phase_space(rows; insets = NamedTuple[], free = NamedTuple[], title = "",
+	                 x = :log, y = :layers, colors = PHASE_COLORS, labels = PHASE_LABELS)
+
+The phase space. `rows` has one entry per run with fields layers, N0, class (the
+class at the readout, classify_pattern) and, for y = :diameter, D.
+
+* x = :log (log10 N0) or :linear (N0); y = :layers (plate gap) or :diameter (the
+  pancake diameter at squeezing); see phase_space!
+* every (layers, N0) point is a pie of the outcomes of its seeds
+* the background takes the colour of the majority outcome of the nearest point
+* two thresholds per number of layers, where they exist: the N0 above which
+  patterns form (dashed), and the N0 below which the aggregate polarises (dotted),
+  half-way between the two points that bracket the change; half a step outside
+  the grid when every point is past it
+* `insets`: (cells, label, layers, N0) drawn in 3D on the right (top cutaway and
+  side view), each tied to its point by a letter
+* `free`: unconfined runs (N0, class), drawn as an extra top row "unconfined" --
+  what a gap much wider than the aggregate tends to
+"""
+function plot_phase_space(rows; insets = NamedTuple[], free = NamedTuple[], title = "",
+		x = :log, y = :layers, colors = PHASE_COLORS, labels = PHASE_LABELS)
+	order = ["CENTRAL", "PATTERN", "POLARISED", "OTHER"]
+	fig = Figure(size = (isempty(insets) ? 900 : 1500, 820), figure_padding = 20)
+	phase_space!(fig[1, 1], rows; insets = insets, free = free, title = title, x = x, y = y, colors = colors)
+	if !isempty(insets)
+		g = fig[1, 2] = GridLayout()
+		for (i, ins) in enumerate(insets)
+			letter = string('A' + i - 1)
+			draw_cells!(g[i, 1], ins.cells; view = :top, label = "$letter  " * ins.label, labelsize = 17)
+			draw_cells!(g[i, 2], ins.cells; view = :side)
+		end
+		colsize!(fig.layout, 2, Relative(0.36))
+	end
+	Legend(fig[2, 1], [PolyElement(color = colors[c]) for c in order], [labels[c] for c in order];
+		   orientation = :horizontal, framevisible = false, labelsize = 18)
+	fig
+end;
+
+"""
+	record_pancake_frames(d, color_map, ks; views = (:top, :side), fps = 8,
+	                      size_ratio = 0.8, filename = "movie.mp4")
+
+record_pancake for the array format of load_frames: one column per view, one
+movie frame per index in `ks`, the time (hours) and B fraction in the title.
+The top view is the mid-plane cutaway, as in plot_gallery. Cells are padded to
+the largest frame (unused ones get size 0) so the plot can be updated in place
+while cells divide.
+"""
+function record_pancake_frames(d, color_map, ks; views = (:top, :side), fps = 8,
+		size_ratio = 0.8, filename = "movie.mp4")
+	nmax = maximum(length(d.x[k]) for k in ks)
+	bs = maximum(max(maximum(d.x[k]) - minimum(d.x[k]), maximum(d.y[k]) - minimum(d.y[k])) for k in ks) / 2 + 2.0
+	fig = Figure(size = (round(Int, 600*size_ratio*length(views)), round(Int, 600*size_ratio)), figure_padding = 20)
+	ttl = Observable("")
+	Label(fig[0, 1:length(views)], ttl; fontsize = 24)
+	frame_data(k, v) = begin
+		x, y, z, r, s = d.x[k], d.y[k], d.z[k], d.r[k], d.cell_state[k]
+		zc = mean(z)
+		show_ = [!(v == :top && z[i] > zc + 0.2) for i in eachindex(z)]
+		pad = nmax - length(x)
+		P = [Point3f(x[i] - mean(x), y[i] - mean(y), z[i] - zc) for i in eachindex(x)]
+		(vcat(P, fill(Point3f(0, 0, 0), pad)),
+		 vcat([show_[i] ? Float32(r[i]) : 0f0 for i in eachindex(r)], zeros(Float32, pad)),
+		 vcat([color_map[s[i]] for i in eachindex(s)], fill(color_map[3], pad)))
+	end
+	obs = []
+	for (j, v) in enumerate(views)
+		ax = Axis3(fig[1, j], aspect = :data, azimuth = 0,
+			elevation = v == :top ? pi/2 : 2*pi + pi/32,
+			xgridvisible = false, ygridvisible = false, zgridvisible = false,
+			xspinesvisible = false, yspinesvisible = false, zspinesvisible = false,
+			xticksvisible = false, yticksvisible = false, zticksvisible = false,
+			xticklabelsvisible = false, yticklabelsvisible = false, zticklabelsvisible = false,
+			xlabel = "", ylabel = "", zlabel = "", title = String(v), titlesize = 20)
+		P, R, C = frame_data(ks[1], v)
+		Po = Observable(P); Ro = Observable(R); Co = Observable(C)
+		meshscatter!(ax, Po; markersize = Ro, color = Co)
+		xlims!(ax, -bs, bs); ylims!(ax, -bs, bs); zlims!(ax, -bs, bs)
+		push!(obs, (v, Po, Ro, Co))
+	end
+	record(fig, filename, ks; framerate = fps) do k
+		for (v, Po, Ro, Co) in obs
+			P, R, C = frame_data(k, v)
+			Po[] = P; Ro[] = R; Co[] = C        # padded: the lengths never change
+		end
+		fB = count(==(2), d.cell_state[k]) / length(d.cell_state[k])
+		ttl[] = @sprintf("t = %.1f h   fB = %.2f   N = %d", d.t[k] / 15,      # 15 time units = 1 h
+			 fB, length(d.x[k]))
+	end
+	filename
+end;
+
+"""
+	replot_figures(figdir; save_png = true)
+
+Redraw every final figure from figdir/data alone: each data/<figure>/ with a
+panels.tsv becomes figdir/<figure>.png; each data/phase_space*/ (phase_space.csv,
+free.csv, panels.tsv for the insets, readout.txt naming the class column to draw)
+becomes four charts, figdir/phase_space*.png (y = plate gap, x = log10 N0),
+*_N0.png (x = N0), *_diameter.png and *_diameter_N0.png (y = pancake diameter at
+squeezing, when phase_space.csv has the column D).
+"""
+function replot_figures(figdir; save_png = true)
+	figs = Dict{String,Any}()
+	for name in sort(readdir(joinpath(figdir, "data")))
+		dir = joinpath(figdir, "data", name)
+		isdir(dir) || continue
+		if startswith(name, "phase_space") && isfile(joinpath(dir, "phase_space.csv"))
+			# which readout to draw: readout.txt names the class column (default class_02)
+			ccol = isfile(joinpath(dir, "readout.txt")) ? String(strip(read(joinpath(dir, "readout.txt"), String))) : "class_02"
+			raw, hdr = readdlm(joinpath(dir, "phase_space.csv"), ','; header = true)
+			col = Dict(strip(String(hdr[i])) => i for i in eachindex(hdr))
+			rows = [(layers = Float64(raw[i, col["layers"]]), N0 = Int(raw[i, col["N0"]]),
+					 class = String(raw[i, col[ccol]]), D = haskey(col, "D") ? Float64(raw[i, col["D"]]) : NaN)
+					for i in 1:size(raw, 1)]
+			ins = NamedTuple[]
+			if isfile(joinpath(dir, "panels.tsv"))
+				for l in readlines(joinpath(dir, "panels.tsv"))[2:end]
+					isempty(strip(l)) && continue
+					p = split(l, '\t')       # panel, layers, N0, views, label, file
+					push!(ins, (cells = load_panel(joinpath(dir, p[6])), label = replace(p[5], "|" => "\n"),
+								layers = parse(Float64, p[2]), N0 = parse(Int, p[3])))
+				end
+			end
+			free = NamedTuple[]
+			if isfile(joinpath(dir, "free.csv"))      # unconfined runs: N0, seed, class_02, ...
+				raw, hdr = readdlm(joinpath(dir, "free.csv"), ','; header = true)
+				fc = Dict(strip(String(hdr[i])) => i for i in eachindex(hdr))
+				free = [(N0 = Int(raw[i, fc["N0"]]), class = String(raw[i, fc[ccol]])) for i in 1:size(raw, 1)]
+			end
+			title = isfile(joinpath(dir, "title.txt")) ? strip(read(joinpath(dir, "title.txt"), String)) : ""
+			for (suffix, x, y) in (("", :log, :layers), ("_N0", :linear, :layers),
+								   ("_diameter", :log, :diameter), ("_diameter_N0", :linear, :diameter))
+				y == :diameter && !haskey(col, "D") && continue
+				figs[name * suffix] = plot_phase_space(rows; insets = ins, free = free, title = title, x = x, y = y)
+				save_png && save(joinpath(figdir, "$(name)$(suffix).png"), figs[name * suffix])
+			end
+		elseif isfile(joinpath(dir, "panels.tsv"))
+			figs[name] = plot_panels(dir)
+			save_png && save(joinpath(figdir, "$(name).png"), figs[name])
+		end
+		haskey(figs, name) && println("redrew $(name)")
+	end
+	figs
+end;
+
 # ---- notebook cell 9557e7da ----------------------------------------------------
 # --- island detection ---------------------------------------------------------
 
@@ -324,6 +822,251 @@ end;
 confinement_report(com, L; kw...) = confinement_report(com.z, L; kw...);
 
 
+# ---- notebook cell 7c1d9e42 ----------------------------------------------------
+# --- slab thickness over time ----------------------------------------------------
+
+"""
+	thickness_timeline(d, L; from = 1, r = 1.0)
+
+How thick the slab stays, frame by frame. For a plate gap L the cell centres
+should sit in [r, L - r]. Returns, per frame:
+
+* `spread`      full z-spread of the centres
+* `spread98`    z-spread of the central 98 % (robust to a few stray cells)
+* `layers_eff`  effective number of layers, (spread98 + 2r) / (2.1 r): the gap
+                for `layers` layers is 2.1 r * layers, so 1.0 = one cell thick
+* `outside`     fraction of centres outside [r, L - r]
+"""
+function thickness_timeline(d, L; from = 1, r = 1.0)
+	out = NamedTuple[]
+	for k in from:length(d.z)
+		z = d.z[k]
+		sp   = maximum(z) - minimum(z)
+		sp98 = quantile(z, 0.99) - quantile(z, 0.01)
+		push!(out, (t = d.t[k], spread = sp, spread98 = sp98,
+					layers_eff = (sp98 + 2r) / (2.1r),
+					outside = count(v -> v < r - 1e-6 || v > L - r + 1e-6, z) / length(z)))
+	end
+	out
+end;
+
+# ---- notebook cell 2d4f6a81 ----------------------------------------------------
+# --- pattern readout for the B/C model --------------------------------------------
+#
+# Mirrors how the experimental images are segmented: B cells sitting in a dense B
+# neighbourhood form clusters (the coloured islands in experiments/pattern-examples),
+# the others are isolated cells (the white points there).
+#
+#   core B cell   at least `kmin` other B cells within `cut` (1.3 cell diameters)
+#   cluster       core cells linked within `cut`, plus the B cells touching them
+#   island        a cluster of at least `nmin` cells
+#   isolated      any other B cell
+#
+# The July readout (island_stats, cell above) used plain single linkage and called
+# a loose texture "dispersed" -- the very kind of pattern we now want -- so the B/C
+# readout is built on this instead.
+
+"""
+	b_clusters(x, y, z, s; cut = 2.6, kmin = 3)
+
+Cluster label of every B cell (0 = isolated). Returns (idx, label, nbrs): `idx`
+are the indices of the B cells, `label[i]` the cluster of idx[i], `nbrs[i]` its
+B neighbours (positions in idx).
+"""
+function b_clusters(x, y, z, s; cut = 2.6, kmin = 3)
+	idx = findall(==(2), s)
+	n = length(idx)
+	label = zeros(Int, n)
+	nbrs = [Int[] for _ in 1:n]
+	n == 0 && return (idx = idx, label = label, nbrs = nbrs)
+	px, py, pz = x[idx], y[idx], z[idx]
+	lo = (minimum(px), minimum(py), minimum(pz))
+	cell(i) = (floor(Int, (px[i]-lo[1])/cut), floor(Int, (py[i]-lo[2])/cut),
+			   floor(Int, (pz[i]-lo[3])/cut))
+	bucket = Dict{NTuple{3,Int},Vector{Int}}()
+	for i in 1:n; push!(get!(bucket, cell(i), Int[]), i); end
+	c2 = cut^2
+	for i in 1:n
+		ci = cell(i)
+		for dx in -1:1, dy in -1:1, dz in -1:1
+			b = get(bucket, (ci[1]+dx, ci[2]+dy, ci[3]+dz), nothing)
+			b === nothing && continue
+			for j in b
+				j == i && continue
+				if (px[i]-px[j])^2 + (py[i]-py[j])^2 + (pz[i]-pz[j])^2 < c2
+					push!(nbrs[i], j)
+				end
+			end
+		end
+	end
+	core = [length(nbrs[i]) >= kmin for i in 1:n]
+	nlab = 0
+	for i in 1:n
+		(core[i] && label[i] == 0) || continue
+		nlab += 1
+		stack = [i]; label[i] = nlab
+		while !isempty(stack)
+			a = pop!(stack)
+			for b in nbrs[a]
+				if core[b] && label[b] == 0
+					label[b] = nlab; push!(stack, b)
+				end
+			end
+		end
+	end
+	for i in 1:n
+		core[i] && continue
+		for b in nbrs[i]
+			if core[b]; label[i] = label[b]; break; end
+		end
+	end
+	(idx = idx, label = label, nbrs = nbrs)
+end;
+
+"Mean, over the B cells `idx`, of the fraction of B among each cell's neighbours within `cut`."
+function looseness(x, y, z, s, idx; cut = 2.6)
+	n = length(x)
+	lo = (minimum(x), minimum(y), minimum(z))
+	cell(i) = (floor(Int, (x[i]-lo[1])/cut), floor(Int, (y[i]-lo[2])/cut),
+			   floor(Int, (z[i]-lo[3])/cut))
+	bucket = Dict{NTuple{3,Int},Vector{Int}}()
+	for i in 1:n; push!(get!(bucket, cell(i), Int[]), i); end
+	c2 = cut^2
+	acc = 0.0; m = 0
+	for i in idx
+		ci = cell(i); nb = 0; nbB = 0
+		for dx in -1:1, dy in -1:1, dz in -1:1
+			b = get(bucket, (ci[1]+dx, ci[2]+dy, ci[3]+dz), nothing)
+			b === nothing && continue
+			for j in b
+				j == i && continue
+				if (x[i]-x[j])^2 + (y[i]-y[j])^2 + (z[i]-z[j])^2 < c2
+					nb += 1
+					s[j] == 2 && (nbB += 1)
+				end
+			end
+		end
+		if nb > 0; acc += nbB / nb; m += 1; end
+	end
+	m == 0 ? NaN : acc / m
+end;
+
+"""
+	pattern_stats(x, y, z, s; confined = true, cut = 2.6, kmin = 3, nmin = 10)
+
+One frame of the B/C model. Returns:
+
+	nB, fB      number and fraction of B cells
+	n_isl       number of islands (clusters of >= nmin cells)
+	f_isl       fraction of B cells in islands
+	f_iso       fraction of B cells that are isolated
+	f_max       fraction of B cells in the largest island
+	offset      3D shift of the B centroid from the aggregate centre, / R
+	            (a polarised aggregate can shift in-plane or towards a plate)
+	offset_max  the same for the largest island
+	spread      mean distance of the B cells from the centre, / R: how far B is
+	            spread out (a compact central blob ~0.1, rings and islands ~0.4-0.6)
+	fill        B fraction of the cells in the middle (closer to the centre than
+	            0.7 x the radius a compact central blob of the current B would
+	            have): ~0.7-0.9 for a central cluster, even a loose one; ~0.2-0.4
+	            for a ring (C in the middle) or islands
+	S           looseness: mean fraction of B among a B cell's neighbours
+	            (compact islands -> ~0.8-0.9, random mixing -> ~fB)
+	sizes       island sizes, largest first
+	confined    as passed in (classify_pattern uses it)
+
+R and `spread` use in-plane distances when `confined` (a slab), 3D otherwise; R is
+the 98th percentile distance of all cells from the aggregate centre.
+"""
+function pattern_stats(x, y, z, s; confined = true, cut = 2.6, kmin = 3, nmin = 10)
+	N = length(s)
+	cl = b_clusters(x, y, z, s; cut = cut, kmin = kmin)
+	idx, lab = cl.idx, cl.label
+	nB = length(idx)
+	xc, yc, zc = mean(x), mean(y), mean(z)
+	dz = confined ? 0.0 : 1.0
+	rho = sqrt.((x .- xc).^2 .+ (y .- yc).^2 .+ dz .* (z .- zc).^2)
+	R = quantile(rho, 0.98)
+	nB == 0 && return (nB = 0, fB = 0.0, n_isl = 0, f_isl = 0.0, f_iso = 0.0, f_max = 0.0,
+					   offset = NaN, offset_max = NaN, spread = NaN, fill = NaN, S = NaN, sizes = Int[],
+					   confined = confined)
+	counts = Dict{Int,Int}()
+	for l in lab; l > 0 && (counts[l] = get(counts, l, 0) + 1); end
+	isl = [l for (l, c) in counts if c >= nmin]
+	sizes = sort([counts[l] for l in isl]; rev = true)
+	shift(sel) = sqrt((mean(x[sel]) - xc)^2 + (mean(y[sel]) - yc)^2 + (mean(z[sel]) - zc)^2) / R
+	offset = shift(idx)
+	offset_max = isempty(isl) ? NaN : shift(idx[lab .== isl[argmax([counts[l] for l in isl])]])
+	inner = findall(<(0.7 * (confined ? sqrt(nB / N) : cbrt(nB / N)) * R), rho)
+	fill = isempty(inner) ? NaN : count(i -> s[i] == 2, inner) / length(inner)
+	(nB = nB, fB = nB / N, n_isl = length(isl), f_isl = sum(sizes; init = 0) / nB,
+	 f_iso = count(==(0), lab) / nB, f_max = isempty(sizes) ? 0.0 : sizes[1] / nB,
+	 offset = offset, offset_max = offset_max, spread = mean(rho[idx]) / R, fill = fill,
+	 S = looseness(x, y, z, s, idx; cut = cut), sizes = sizes, confined = confined)
+end;
+
+"""
+	classify_pattern(st; pol = 0.4, cen = nothing, iso = 0.7)
+
+From pattern_stats, in this order:
+
+	"NONE"       no B left, or most B cells isolated (f_iso >= iso)
+	"POLARISED"  B as a whole has moved to one side (offset >= pol)
+	"CENTRAL"    B gathered in the middle: spread < cen, or a cluster holding
+	             half of B that fills the middle (fill >= 0.55)
+	"RING"       B spread out, but still one connected network centred on the
+	             middle (largest island >= half of B, its centre within 0.2 R)
+	"ISLANDS"    B spread out in several islands
+	"CENTRAL"    also: a single loose cluster that has not moved (at most one island,
+	             offset < 0.25) -- too little B left for a pattern; typical of very
+	             small aggregates (Oct 7)
+	"OTHER"      anything else -- look at it (e.g. a cluster drifting off-centre)
+
+`cen` defaults to 0.30 in a slab and 0.45 in 3D: B gathered into a central blob
+holding 20 % of the cells has spread ~0.30 in a disc and ~0.44 in a ball -- so
+at the readout a slightly loose central cluster misses it; the `fill` test
+catches those (added Oct 7, checked by eye: central clusters 0.65-0.85, rings
+0.24-0.41; reports/REPORT.md, stage 5).
+"""
+function classify_pattern(st; pol = 0.4, cen = nothing, iso = 0.7)
+	(st.nB == 0 || st.f_iso >= iso) && return "NONE"
+	st.offset >= pol && return "POLARISED"
+	c = cen === nothing ? (st.confined ? 0.30 : 0.45) : cen
+	st.spread < c && return "CENTRAL"
+	(st.f_max >= 0.5 && st.fill >= 0.55) && return "CENTRAL"
+	(st.f_max >= 0.5 && st.offset_max < 0.2) && return "RING"
+	st.n_isl >= 2 && return "ISLANDS"
+	(st.n_isl <= 1 && st.offset < 0.25) && return "CENTRAL"
+	return "OTHER"
+end;
+
+"""
+	pattern_timeline(d; from = 1, confined = true, kw...)
+
+pattern_stats and classify_pattern for every frame of `d` (from load_frames),
+starting at frame `from`. Each row also carries t and the frame index k.
+"""
+function pattern_timeline(d; from = 1, confined = true, kw...)
+	out = NamedTuple[]
+	for k in from:length(d.x)
+		st = pattern_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; confined = confined, kw...)
+		push!(out, merge((k = k, t = d.t[k], class = classify_pattern(st)), st))
+	end
+	out
+end;
+
+"""
+	readout_row(tl; fB_read = 0.2)
+
+The row of a pattern_timeline at the readout: the first frame where the B fraction
+has dropped to `fB_read` (the experimental 96 h reference), or the last frame if
+it never does.
+"""
+function readout_row(tl; fB_read = 0.2)
+	i = findfirst(r -> r.fB <= fB_read, tl)
+	tl[i === nothing ? length(tl) : i]
+end;
+
 # ---- notebook cell 047d722c ----------------------------------------------------
 # --- adhesion energetics (Differential Adhesion Hypothesis) --------------------
 #
@@ -379,79 +1122,6 @@ end;
 # The set used below, for reference:
 #   tension_table(4*[0.9 1 0.6; 1.0 1.6 0.4; 0.6 0.4 0.75],
 #                 2*[1 0.91 1; 0.91 1 1; 1 1 1.07])
-
-
-# ---- notebook cell b3813774 ----------------------------------------------------
-# --- why the threshold moves with the number of layers -------------------------
-#
-# Break-up is NOT set by cell number, it is set by the ASPECT RATIO of the A,B
-# domain. The domain is a flat disc of thickness h (the slab) and in-plane
-# diameter D, and like a liquid sheet it only breaks up once it is wide enough
-# relative to its thickness.
-#
-# Measured with the unified set (f_att x1.00), taking the largest D/h each run
-# reached while the domain was still one piece:
-#
-#     layers 4, N0 2500   D/h 3.16   one blob
-#     layers 3, N0 1700   D/h 4.08   one blob
-#     layers 2, N0  750   D/h 4.75   one blob
-#     layers 4, N0 4000   D/h 5.04   ISLANDS
-#     layers 3, N0 2500   D/h 5.83   ISLANDS
-#     layers 2, N0 1700   D/h 9.13   ISLANDS
-#     layers 1, N0  500   D/h 16.9   ISLANDS
-#
-# so the threshold is D/h ~ 5. (At f_att x0.45 it was ~3.4: stronger adhesion
-# holds the domain together to a wider aspect ratio. Recalibrate with
-# `aspect_report` if you change the adhesion scale.)
-#
-# In cell counts. The domain holds n_AB cells in h/2r layers, so
-#     D = 4*sqrt( n_AB * 2r / (h*pi) )   =>   D/h = 5  <=>  n_AB ~ 22 * layers^3
-# which predicts 22 / 173 / 583 / 1382 cells for layers = 1..4. That separates
-# every run above: the blobs peaked at 181, 422 and 596 cells, the islands ran
-# at 906, 945 and 1474.
-#
-# THE h^3 IS THE EXPERIMENTAL RULE. "If we increase the number of layers, then we
-# need to increase the number of cells in order to get patterns" -- and the
-# coefficient is now predictable rather than fitted. The corresponding N0 at
-# squeezing is larger than n_AB and depends on how much the aggregate grows
-# before the readout; measured brackets are in the phase table.
-
-"""
-	ab_domain_aspect(x, y, z, s; cut = 2.6)
-
-`(D, h, ratio, n_big)` for the largest A,B domain in one frame: equivalent-disc
-in-plane diameter `D`, slab thickness `h`, and `D/h`.
-"""
-function ab_domain_aspect(x, y, z, s; cut = 2.6)
-	sel = findall(i -> s[i] == 1 || s[i] == 2, eachindex(s))
-	isempty(sel) && return (D = NaN, h = NaN, ratio = NaN, n_big = 0)
-	h  = quantile(z, 0.99) - quantile(z, 0.01) + 2.0
-	cs = cluster_sizes(x[sel], y[sel], z[sel], cut)
-	nbig = cs[1]
-	per_layer = nbig / max(h/2.1, 1.0)
-	D = 2 * sqrt(per_layer/pi) * 2.0
-	(D = D, h = h, ratio = D/h, n_big = nbig)
-end;
-
-"Predicted A,B domain size at break-up, from the D/h threshold."
-nAB_threshold(layers; ratio = 5.0, r = 1.0) =
-	(ratio/4)^2 * pi * (2.1*layers*r)^3 / (2r);
-
-"""
-	aspect_report(d, layers)
-
-`D/h` frame by frame alongside the island classification, so you can read off
-the aspect ratio at which THIS parameter set breaks up.
-"""
-function aspect_report(d, layers; from = 1)
-	@printf("%7s %7s %7s %7s %7s  %s\n", "t", "n_big", "D", "h", "D/h", "class")
-	for k in from:length(d.x)
-		x, y, z, s = d.x[k], d.y[k], d.z[k], d.cell_state[k]
-		a = ab_domain_aspect(x, y, z, s)
-		cls = classify_islands(island_stats(x, y, z, s, layers))
-		@printf("%7.0f %7d %7.1f %7.2f %7.2f  %s\n", d.t[k], a.n_big, a.D, a.h, a.ratio, cls)
-	end
-end;
 
 
 # ---- notebook cell ff3415f8 ----------------------------------------------------

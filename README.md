@@ -19,27 +19,42 @@ Two cell types: B (T/Bra+), which starts as a core holding 60 % of the cells, an
   rounding into a sphere.
 
 The living report with the current state is
-**[reports/REPORT.md](reports/REPORT.md)**.
+**[reports/REPORT.md](reports/REPORT.md)**. The physics and every parameter are in
+[reports/MODEL.md](reports/MODEL.md), and how each final figure was made is in
+[reports/FIGURES.md](reports/FIGURES.md).
+
+**The parameter set** (`PSETS["final"]` in the notebook, Oct 8): the July/FUSION mechanics with B stiffness
+`f_rep` BB = 4.5, C stiffness `f_rep` CC = 6 and a shorter B–B adhesion range `mu` BB = 1.9 (patterns in
+slabs of 3+ layers), friction with the plates `lambda_wall` = 1.5, rigid plates, and a sharp B core. The BC
+entries are the FUSION values, unchanged. The Oct 7 set (`mu` BB = 2, patterns only in 1–2 layers) is kept as
+`PSETS["final_oct7"]`, with its figures in `code-claude/figures-oct7/`.
 
 ## Layout
 
 ```
 code-original/        the original code, as committed in f7fd270
   squeezing-gastruloids.ipynb
+  july-laptop/        your July notebook from the laptop (committed Oct 8)
   plots/              original figures and movies
   preamble/           earlier function notebooks
   sotiris/            Sotiris' fusion notebook and figure (reference only)
 code-claude/          Claude's code, built on the original notebook
   squeezing-gastruloids-claude.ipynb
   scripts/            batch runs (library exported from the notebook)
+  figures/            the final 3D figures, movies and the presentation PDF
+    data/             the data behind every final figure (cells: x, y, z, r, cell_state)
+  figures-oct7/       the same figures for the Oct 7 parameter set (kept)
+  results/            raw simulation runs (large, gitignored)
   july-2026/          superseded July code, figures and runs
 reports/
   REPORT.md           living report: constraints, decisions, results
-  july-2026/          the July reports (superseded)
+  MODEL.md            the model: equations, physics, parameters
+  FIGURES.md          how each final figure was made (initial condition, procedure, data)
+  july-2026/          the July reports (superseded), with the LaTeX report in report/
 claude-answers/       Claude's answers, as markdown with images
-experiments/
+experiments/         local only, gitignored
   pattern-examples/   experimental pattern examples
-  presentations/      experimental presentations (local only, gitignored)
+  presentations/      experimental presentations
 Project.toml, Manifest.toml   pinned Julia environment
 ```
 

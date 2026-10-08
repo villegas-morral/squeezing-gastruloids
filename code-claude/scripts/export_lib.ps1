@@ -1,7 +1,7 @@
 # Re-export scripts/gastruloids_lib.jl from the notebook, so the library and the
 # notebook cannot drift apart.
 #
-#   cd code; powershell -File scripts/export_lib.ps1
+#   cd code-claude; powershell -File scripts/export_lib.ps1
 #
 # The cell ids below are the function/model/parameter cells. If you add a new
 # function cell to the notebook, add its id here.
@@ -17,24 +17,27 @@ $nb = [System.IO.File]::ReadAllText(
 $ids = @(
   '51154174',  # color_map
   'c17fa1b1',  # initialize_growth
-  'f2f50d7d',  # push_fA!, grow_size!
+  'f2f50d7d',  # grow_size!
   'f818a62d',  # initialize_diff!
-  '9154a7b7',  # differentiate!
+  '9154a7b7',  # fraction_B, differentiate!
   'f06d6c5e',  # stabilize!
   '462afe86',  # plot_pancake
   'ba36859e',  # record_pancake
   '4cd7bbef',  # save_frames / load_frames / plot_frames / plot_pancake_frames
+  '6b8e0c35',  # plot_gallery (3D)
+  'a7f3c2d1',  # final figures: save_panel, plot_panels, plot_phase_space, record_pancake_frames, replot_figures
   '9557e7da',  # cluster_sizes / island_stats / classify_islands
   '756cfff2',  # island_timeline / polar_stats / confinement_report
+  '7c1d9e42',  # thickness_timeline
+  '2d4f6a81',  # B/C pattern readout: b_clusters, pattern_stats, classify_pattern
   '047d722c',  # adhesion energetics
   'cad66be3',  # fusion assay
-  '8a8800de',  # run_confined / phase_scan
-  'b3813774',  # aspect ratio
+  '8a8800de',  # PSETS, wall_settings, run_confined, phase_scan
+  '5e7c1a90',  # run_unconfined
   'ff3415f8',  # plot_phase / critical_N0
   '99c84e68',  # THE MODEL
   '6ff203b2',  # parameters_tfm
-  '93111bf3',  # parameters_do
-  'f3b763eb'   # run_unconfined
+  '93111bf3'   # parameters_do
 )
 
 $header = @'
@@ -45,7 +48,7 @@ $header = @'
 # notebook and re-export with scripts/export_lib.ps1 so the two cannot drift.
 #
 # Usage:
-#   using Random, Statistics, Printf, Distributions, ProgressMeter
+#   using Random, Statistics, Printf, Distributions, ProgressMeter, DelimitedFiles
 #   using CellBasedModels; import CellBasedModels: update!
 #   using JLD2, CairoMakie
 #   include("gastruloids_lib.jl")
@@ -78,10 +81,13 @@ Export-Cells $ids $header (Join-Path $PSScriptRoot "gastruloids_lib.jl")
 $analysisIds = @(
   '51154174',  # color_map
   '4cd7bbef',  # save/load/plot_frames, plot_pancake_frames
+  '6b8e0c35',  # plot_gallery (3D)
+  'a7f3c2d1',  # final figures: save_panel, plot_panels, plot_phase_space, record_pancake_frames, replot_figures
   '9557e7da',  # cluster_sizes / island_stats / classify_islands
   '756cfff2',  # island_timeline / polar_stats / confinement_report
+  '7c1d9e42',  # thickness_timeline
+  '2d4f6a81',  # B/C pattern readout: b_clusters, pattern_stats, classify_pattern
   '047d722c',  # adhesion energetics
-  'b3813774',  # aspect ratio
   'ff3415f8'   # plot_phase / critical_N0
 )
 $analysisHeader = @'
