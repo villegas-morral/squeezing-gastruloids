@@ -483,30 +483,30 @@ The Oct 7 set is kept as `PSETS["final_oct7"]`, with its figures in `code-claude
 
 | layers | polarised up to N0 | central | patterns from N0 |
 |---|---|---|---|
-| 1 | — | 75–178 | ≈ 200 (islands; 178 is 1 of 2) |
-| 2 | 75 (one seed "other") | 89–300 | ≈ 330 (rings, islands by fB 0.12; 300 is 1 of 2) |
-| 3 | 150 | 178–1200 | ≈ 1300 (rings; 1427, 1697, 2400 and 4800 all rings) |
+| 1 | — | 75–150 | ≈ 160 (islands; 178 is 2 of 3) |
+| 2 | 75 (one seed "other") | 89–212 | ≈ 250 (rings, islands by fB 0.12; 300 is 2 of 3) |
+| 3 | 150–178 | 212–1200 | ≈ 1300 (rings; 1200 central and 1427 ring, 3 of 3 each) |
 | 4 | 212 | 300–3394 | between 3394 and 4800 (ring at 4800; 3394 central in 2 of 2) |
-| 5 | 212 | 300–600 | (not run above 600) |
+| 5 | 300 | 600 | (not run above 600) |
 | 6 | 600 | 714–2400 | none up to 2400 (4800 not run) |
 | 7 | 849 | | (one point) |
 | 8, 12 | 1009 | 1200–2400 | none up to 2400 |
-| unconfined | 600 | 849–2400 | none up to 2400 (N0 4800 still running at the commit) |
+| unconfined | 600 | 849 (mixed: 2 other, 1 central)–2400 | none up to 2400 (N0 4800 still running at the commit) |
 
-Seeds: 2 per point (1 at N0 4800); 157 runs in all.
+Seeds: 2 per point, 3 at the points next to a threshold, 1 at N0 4800; 177 runs in all.
 
 - **The three regions of your sketch, with patterns at 1–4 layers.**
   - The pattern threshold rises steeply with thickness.
   - The smallest monolayers are now central clusters (N0 75–150), as in the sketch. With the Oct 7 set they
     patterned.
 - **The pancake diameter at squeezing explains most of the threshold.** The pattern threshold spans
-  N0 ≈ 200 to ≈ 4000 over 1–4 layers, a factor of 20. In diameter it spans only 10–16 cell diameters
-  (≈ 100–160 µm if r = 5 µm). Last central → first pattern, in cell diameters (`phase_space.csv`, column D):
+  N0 ≈ 170 to ≈ 4000 over 1–4 layers, a factor of 25. In diameter it spans only 8–17 cell diameters
+  (≈ 80–170 µm if r = 5 µm). Last central → first pattern, in cell diameters (`phase_space.csv`, column D):
 
   | layers | last central | first pattern |
   |---|---|---|
-  | 1 | D 13.4 (N0 178, 1 of 2 central) | D 14.5 |
-  | 2 | D 9.0 (N0 300, 1 of 2) | D 9.6 |
+  | 1 | D 12.4 (N0 150) | D 13.4 (N0 178, 2 of 3) |
+  | 2 | D 7.8 (N0 212) | D 9.0 (N0 300, 2 of 3) |
   | 3 | D 11.6 | D 12.5 |
   | 4 | D 14.4 | D 16.8 |
 
@@ -538,8 +538,9 @@ Seeds: 2 per point (1 at N0 4800); 157 runs in all.
   patterns at 3 layers from N0 ≈ 1300 and at 4 layers at N0 4800. Slabs of 6+ layers do not pattern up to
   N0 2400 (their pancakes stay narrow); larger N0 there was not run.
 * **`mu` BB 1.9 sits close to the edge.** At 1.85, B dissolves into C (W_BB ≈ W_CC). The margin is about
-  0.05 in `mu` BB, or 10 % in B–B adhesion energy.
-* **2 seeds per point** in the Oct 8 phase space (1 at N0 4800); the Oct 7 one had 3–5.
+  0.05 in `mu` BB, or 13 % in B–B adhesion energy (0.79 → 0.68).
+* **2–3 seeds per point** in the Oct 8 phase space (3 next to the thresholds, 1 at N0 4800); the Oct 7 one had
+  3–5.
 * **The central-to-ring transition is gradual, so the thresholds depend on the classifier cut.** As N0 grows
   past the threshold, the central cluster hollows out. Its `fill` falls smoothly:
   - ≈ 0.65 for clearly central

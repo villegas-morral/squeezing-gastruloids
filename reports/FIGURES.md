@@ -169,7 +169,8 @@ fB = 0.2:
 
 **What:** the phase space of the final set (`results/stage5/phase_D`).
 - **Grid:** layers 1, 2, 3, 4, 6, 8, 12 × N0 75, 150, 300, 600, 1200, 2400, plus N0 4800 at 1–4 layers.
-- **Seeds:** 2 per point, 1 at N0 4800.
+- **Seeds:** 2 per point, 1 at N0 4800, and a third seed at the points next to a threshold
+  (`phase_D_refine4.csv`).
 - **Refinement:** points between neighbours of different majority class, 2 seeds each:
   - N0 89, 106, 178, 212, 357, 424, 714, 849, 1009, 1427, 1697, and layers 5 and 7
   - two rounds (`scripts/stage5_phase.jl table` writes them; job lists `phase_D_refine1.csv` and

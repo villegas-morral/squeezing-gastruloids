@@ -7,7 +7,9 @@ N0,seed,class_02,class_012,offset,file
 600,2,POLARISED,POLARISED,0.5225,com_free_N600_july_frB4.5_frC6_muB1.9_w0_s2.jld2
 849,1,OTHER,POLARISED,0.3882,com_free_N849_july_frB4.5_frC6_muB1.9_w0_s1.jld2
 849,2,CENTRAL,POLARISED,0.1826,com_free_N849_july_frB4.5_frC6_muB1.9_w0_s2.jld2
+849,3,OTHER,POLARISED,0.3816,com_free_N849_july_frB4.5_frC6_muB1.9_w0_s3.jld2
 1200,1,CENTRAL,CENTRAL,0.0682,com_free_N1200_july_frB4.5_frC6_muB1.9_w0_s1.jld2
 1200,2,CENTRAL,POLARISED,0.1837,com_free_N1200_july_frB4.5_frC6_muB1.9_w0_s2.jld2
+1200,3,CENTRAL,POLARISED,0.1718,com_free_N1200_july_frB4.5_frC6_muB1.9_w0_s3.jld2
 2400,1,CENTRAL,CENTRAL,0.0478,com_free_N2400_july_frB4.5_frC6_muB1.9_w0_s1.jld2
 2400,2,CENTRAL,CENTRAL,0.0380,com_free_N2400_july_frB4.5_frC6_muB1.9_w0_s2.jld2

@@ -20,25 +20,25 @@ figure is made in [reports/FIGURES.md](../reports/FIGURES.md).*
 4. **The presentation PDF** follows your sketch (A model, B no / medium / strong confinement over time,
    C phase space), in your colours: `code-claude/figures/presentation.pdf`.
 
-**The new phase space** (157 runs, 2 seeds per point) has your three regions, now with patterns at 1–4
+**The new phase space** (177 runs, 2–3 seeds per point) has your three regions, now with patterns at 1–4
 layers:
 
 | layers | polarised up to N0 | central cluster | patterns from N0 |
 |---|---|---|---|
-| 1 | — | 75–178 | ≈ 200 |
-| 2 | 75 | 89–300 | ≈ 330 |
-| 3 | 150 | 178–1200 | ≈ 1300 |
+| 1 | — | 75–150 | ≈ 160 |
+| 2 | 75 | 89–212 | ≈ 250 |
+| 3 | 150–178 | 212–1200 | ≈ 1300 |
 | 4 | 212 | 300–3394 | between 3394 and 4800 |
 | 6–12 | 600–1000 | above that, up to 2400 | none up to 2400 |
 | unconfined | 600 | 849–2400 | none up to 2400 |
 
 **The diameter plots (task 3) show why the threshold rises so steeply.** Over 1–4 layers the pattern
-threshold spans N0 ≈ 200–4000, a factor of 20, but only 10–16 cell diameters in pancake width
-(≈ 100–160 µm if a cell is 10 µm across):
-- 2 layers: patterns from D ≈ 9.5
+threshold spans N0 ≈ 170–4000, a factor of 25, but only about 8–17 cell diameters in pancake width
+(≈ 80–170 µm if a cell is 10 µm across):
+- 2 layers: patterns from D ≈ 8.5
 - 3 layers: from D ≈ 12
-- 4 layers: from D ≈ 15
-- 1 layer: from D ≈ 14
+- 4 layers: from D ≈ 15.5
+- 1 layer: from D ≈ 13
 
 So most of the effect is that thicker slabs need many more cells to reach the same width. The width needed
 still rises a little with thickness.
@@ -174,8 +174,8 @@ The same four exist for the late readout (`phase_space_late*.png`) and for the O
   and relaxation, when B is seeded. It is the diameter of the disc the cells fill, 2√(2⟨ρ²⟩) + 2r, in cell
   diameters (× 10 µm if r = 5 µm). It is column `D` of `figures/data/phase_space/phase_space.csv`.
 - **Points of one thickness** lie on a curve, D ∝ √(N0 / layers).
-- **What the diameter plots show** (see "In short"): the pattern threshold, which spans N0 ≈ 200–4000,
-  falls within D ≈ 10–16. Most of the steep rise in N0 is just that a thicker slab needs more cells to reach
+- **What the diameter plots show** (see "In short"): the pattern threshold, which spans N0 ≈ 170–4000,
+  falls within D ≈ 8–17. Most of the steep rise in N0 is just that a thicker slab needs more cells to reach
   the same width.
 - **The y axis** (layers or diameter) is on a log scale, with the unconfined runs as a separate top row
   above a white break, as in your sketch.
@@ -243,8 +243,8 @@ The page layout (positions in points on the A4 page) is the last block of that s
 
 ## What is left / what you may want to change
 
-- **Seeds.** The new phase space has 2 seeds per point (1 at N0 4800), against 3–5 for the Oct 7 one. The
-  boundaries are drawn from 1–2 runs. More seeds is the same command with more lines in the job list
+- **Seeds.** The new phase space has 2 seeds per point, 3 next to the thresholds and 1 at N0 4800, against
+  3–5 for the Oct 7 one. More seeds is the same command with more lines in the job list
   (`results/stage5/phase_D*.csv`); everything is resumable.
 - **The thresholds are a little soft.** With the weaker B, the change from central cluster to ring is
   gradual: as N0 grows, the cluster hollows out.
