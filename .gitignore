@@ -8,3 +8,15 @@ code-claude/results/
 code-claude/july-2026/results/
 code-claude/july-2026/coms/
 *.ipynb.bak
+
+# LaTeX build files of the reports
+reports/**/*.aux
+reports/**/*.bbl
+reports/**/*.bcf
+reports/**/*.blg
+reports/**/*.fdb_latexmk
+reports/**/*.fls
+reports/**/*.log
+reports/**/*.out
+reports/**/*.run.xml
+reports/**/*.toc

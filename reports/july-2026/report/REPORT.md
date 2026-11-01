@@ -165,7 +165,7 @@ The offset climbs monotonically and $r_{AB}>r_C$: the A,B cells segregate to one
 pole and sit at the surface, C on the other side. It has not saturated by the end
 of the run, so a longer $t_f$ gives a more completely separated end state.
 
-![polarisation](code/figures/polarisation.png)
+![polarisation](../../../code-claude/july-2026/figures/polarisation.png)
 
 ### 5.3 Pattern phase map
 
@@ -202,7 +202,7 @@ Every run in the map:
 | 4 | 3200 | ISLANDS | 2 | 0.53 | 1.00 | 7.36 |
 | 4 | 4000 | ISLANDS | 3 | 0.40 | 0.99 | 7.39 |
 
-![phase map](code/figures/phase_map.png)
+![phase map](../../../code-claude/july-2026/figures/phase_map.png)
 
 ### 5.3b How well the plates actually confine
 

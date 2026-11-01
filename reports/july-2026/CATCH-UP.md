@@ -158,7 +158,7 @@ vs 0.947).
 
 ### Unconfined polarisation (N₀ 300, t 0 → 700)
 
-![polarisation](code/figures/polarisation.png)
+![polarisation](../../code-claude/july-2026/figures/polarisation.png)
 
 The A,B centroid ends **0.945 aggregate radii** off-centre, with A,B on the
 surface (`r_AB` 0.973 vs `r_C` 0.637). The offset is still rising at the end of
@@ -166,7 +166,7 @@ the run.
 
 ### The pattern phase map (20 runs, seed 2345, tf 625)
 
-![phase map](code/figures/phase_map.png)
+![phase map](../../code-claude/july-2026/figures/phase_map.png)
 
 | layers | central cluster up to | patterns from |
 |---|---|---|
@@ -183,7 +183,7 @@ lines (§5).
 Top row: top view with the cells above the mid-plane cut away. Bottom row: side
 view.
 
-![all patterns](code/figures/patterns_3D_all.png)
+![all patterns](../../code-claude/july-2026/figures/patterns_3D_all.png)
 
 There is one figure per case in `code/figures/pattern_L<n>_{islands,no_islands}_N<N0>.png`,
 and a time series per layer in `timeline_L<n>_N<N0>.png`.

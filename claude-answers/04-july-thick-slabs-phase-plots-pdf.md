@@ -53,8 +53,8 @@ is pushed. Your commit added two folders that predated the reorganisation; this 
 | your file | now | what it is |
 |---|---|---|
 | `report-july-tex/main.tex`, `refs.bib`, `confined-gastruloids-report.pdf`, `main.synctex.gz` | `reports/july-2026/report/` | your LaTeX report on the July work |
-| `report-july-tex/*.png, *.jpg` (14 images) | already in `reports/july-2026/report/` | byte-identical copies; the duplicates were dropped |
-| `report-july-tex/3layers-islands.png`, `example-aggregate.png`, `sotiris_fusion-edit.jpeg` | `reports/july-2026/report/` | the images only the LaTeX report uses (`3layers-island.png` there was the same image under another name and is now `3layers-islands.png`, the name `main.tex` uses) |
+| `report-july-tex/*.png, *.jpg` (14 images) | already in `reports/july-2026/report/` (now in its `figures/`) | byte-identical copies; the duplicates were dropped |
+| `report-july-tex/3layers-islands.png`, `example-aggregate.png`, `sotiris_fusion-edit.jpeg` | `reports/july-2026/report/figures/` | the images only the LaTeX report uses (`3layers-island.png` there was the same image under another name and is now `3layers-islands.png`, the name `main.tex` uses) |
 | `report-july-tex/REPORT.md` | `reports/july-2026/report/REPORT.md` | my July markdown report with your title. The old copy is still `reports/july-2026/REPORT.md`. |
 | `code/code-old-july-anothermachine/squeezing-gastruloids.ipynb` | `code-original/july-laptop/` | **your** notebook, a variant of `code-original/squeezing-gastruloids.ipynb` (README there) |
 | `code/code-old-july-anothermachine/squeezing-gastruloids-2.ipynb` | `code-claude/july-2026/squeezing-gastruloids_claude-july_laptop.ipynb` | **my July notebook as you edited it**: shorter introduction, and a four-verdict phase plot |

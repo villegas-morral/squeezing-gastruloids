@@ -99,8 +99,8 @@ Nothing is simulated at this step. The runs come from `code-claude/results/stage
 | `ic_sharp_confined` | 2 layers, N0 2400, sharp core, seed 1 | the seeding frame (t = 0, fB = 0.6) |
 | `ic_sharp_free` | unconfined, N0 600, sharp core, seed 1 | the seeding frame |
 | `ic_fin0.75_confined` | 2 layers, N0 2400, diluted core (`f_in = 0.75`), seed 1 | the seeding frame |
-| `ic_fin0.75_free` | unconfined, N0 500, diluted core, seed 1 | the seeding frame |
 
+- **No diluted unconfined panel:** the diluted core was never run unconfined with these mechanics.
 - **Views:** confined panels show the top (mid-plane cutaway) and the side; free panels show the top cut and
   the front.
 - **Source runs:**
