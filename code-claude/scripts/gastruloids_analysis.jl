@@ -75,7 +75,7 @@ projection through the whole slab lets the C roof hide the islands underneath.
 function plot_frames(d, color_map, ks;
 		slice = true, halfwidth = 1.2, markersize = 4,
 		filename = "frames", savefig = false)
-	fig = Figure(size = (320*length(ks), 340))
+	fig = Figure(size = (320*length(ks), 340), fonts = TEX_FONTS)
 	for (i, k) in enumerate(ks)
 		x, y, z, s = d.x[k], d.y[k], d.z[k], d.cell_state[k]
 		keep = slice ? findall(v -> abs(v - mean(z)) < halfwidth, z) : collect(eachindex(z))
@@ -123,7 +123,7 @@ function plot_pancake_frames(d, color_map, ks;
 	bs = boxsize === nothing ?
 		maximum(maximum(d.x[k]) - minimum(d.x[k]) for k in ks) / 1.9 : boxsize
 	labelsize = 26*size_ratio
-	fig = Figure(size = (round(Int, 520*size_ratio*length(ks)),
+	fig = Figure(fonts = TEX_FONTS, size = (round(Int, 520*size_ratio*length(ks)),
 						 round(Int, 470*size_ratio*n_views)), figure_padding = 20)
 
 	for (j, view) in enumerate(views), (i, k) in enumerate(ks)
@@ -184,7 +184,7 @@ function plot_gallery(panels; ncol = length(panels), views = (:top, :side), cut_
 	nv = length(views)
 	nrow = cld(length(panels), ncol)
 	toff = title === nothing ? 0 : 1
-	fig = Figure(size = (round(Int, 520*size_ratio*ncol),
+	fig = Figure(fonts = TEX_FONTS, size = (round(Int, 520*size_ratio*ncol),
 						 round(Int, 470*size_ratio*nv*nrow) + 70*toff), figure_padding = 20)
 	title === nothing || Label(fig[1, 1:ncol], title; fontsize = labelsize + 6, font = :bold)
 	for (p, pan) in enumerate(panels)
@@ -272,7 +272,7 @@ end;
 	GHOST
 
 Opacity of the C cells in the views of unconfined (polarising) aggregates (November
-2026, your choice: 0.2, then "a little less transparent"): the whole ball is drawn, B opaque and C translucent, so the B core
+2026, your choice: 0.2, then 0.3, then 0.5 on Nov 3): the whole ball is drawn, B opaque and C translucent, so the B core
 shows through the C cells around it. As in your original plot_pancake: one
 meshscatter with RGBA colours and no `transparency = true` (whose order-independent
 blending turns many translucent layers dark brown), B drawn first so the C spheres
@@ -280,7 +280,7 @@ in front of it blend over it. Needs GLMakie; CairoMakie draws each sphere as man
 small triangles whose edges add up. Confined aggregates are drawn opaque with the
 mid-plane cutaway (`ghost = nothing`, the default of draw_cells!).
 """
-GHOST = 0.3;
+GHOST = 0.5;
 
 "Colours of the cells with states `s`, all with opacity `a`."
 cell_colors(s; a = 1f0) = [RGBAf(color_map[v], a) for v in s];
@@ -302,6 +302,13 @@ end;
 "Half-width of a box that fits the aggregate in the plane, with a margin."
 box_halfwidth(c) = max(maximum(c.x) - minimum(c.x), maximum(c.y) - minimum(c.y)) / 2 + 2.0;
 
+"A panel title line: plain text, or LaTeX (text with inline \$...\$ math) when it has a \$."
+panel_text(s) = occursin('$', s) ? Makie.LaTeXString(s) : s;
+
+"Camera elevation of the :side view (20 degrees: some of the top shows) and of the :oblique view (45)."
+SIDE_ELEVATION = pi/9;
+OBLIQUE_ELEVATION = pi/4;
+
 """
 	draw_cells!(pos, c; view = :top, ghost = nothing, cut_top = true, label = "", labelsize = 18, bs = nothing)
 
@@ -309,9 +316,9 @@ One 3D panel in the plot_pancake look (Axis3 + meshscatter) at the figure positi
 `pos`, for the cells `c` (anything with x, y, z, r, cell_state):
 
 	:top      seen from above
-	:side     seen from the side (shows the slab thickness)
-	:front    the side view turned by 90 degrees (x runs left to right)
-	:oblique  a three-quarter view from above
+	:side     seen from the side, tilted by SIDE_ELEVATION so some of the top shows
+	:front    seen from the side, along y (x runs left to right), level
+	:oblique  a three-quarter view from above (OBLIQUE_ELEVATION)
 
 With ghost = nothing (the default) the cells are opaque, and with cut_top the top
 view leaves out the cells above the mid-plane, so the B layout shows on the cut face
@@ -319,25 +326,38 @@ view leaves out the cells above the mid-plane, so the B layout shows on the cut 
 translucent (unconfined aggregates, where B polarises; November 2026).
 
 `bs` is the half-width of the box (default: fits the aggregate); give every panel
-of a figure the same `bs` to draw them at the same scale.
+of a figure the same `bs` to draw them at the same scale (the box is then a cube, drawn at
+a scale that does not depend on the view). Without `bs`, a flat aggregate seen from the
+side or obliquely gets a flat box, so it fills the panel.
+
+`label`: the title, one line per "\n", each plain text or LaTeX (`panel_text`), above the axis.
 """
 function draw_cells!(pos, c; view = :top, ghost = nothing, cut_top = true, label = "", labelsize = 18, labelcolor = :black, bs = nothing)
 	x, y, z, r, s = c.x, c.y, c.z, c.r, c.cell_state
 	xc, yc, zc = mean(x), mean(y), mean(z)
-	bs = bs === nothing ? box_halfwidth(c) : bs
+	same_scale = bs !== nothing
+	bs = same_scale ? bs : box_halfwidth(c)
 	gh = ghost
 	keep = (view == :top && cut_top && gh === nothing) ? findall(w -> w <= zc + 0.2, z) : collect(eachindex(z))
-	ax = Axis3(pos, aspect = :data,
+	flat = !same_scale && view != :top && maximum(z) - minimum(z) < 1.2bs
+	lines_ = isempty(label) ? String[] : String.(split(label, "\n"))
+	g = isempty(lines_) ? nothing : GridLayout(pos)
+	for (i, l) in enumerate(lines_)
+		Label(g[i, 1], panel_text(l); fontsize = labelsize, color = labelcolor, tellwidth = false)
+	end
+	ax = Axis3(g === nothing ? pos : g[length(lines_) + 1, 1], aspect = :data,
 		azimuth = view == :oblique ? pi/4 : view == :front ? pi/2 : 0,
-		elevation = view == :top ? pi/2 : view in (:side, :front) ? 2*pi + pi/32 : pi/5,
+		elevation = view == :top ? pi/2 : view == :side ? SIDE_ELEVATION : view == :front ? 2*pi + pi/32 : OBLIQUE_ELEVATION,
+		viewmode = same_scale ? :fit : :fitzoom,
 		xlabel = "", ylabel = "", zlabel = "",
 		xgridvisible = false, ygridvisible = false, zgridvisible = false,
 		xspinesvisible = false, yspinesvisible = false, zspinesvisible = false,
 		xticksvisible = false, yticksvisible = false, zticksvisible = false,
-		xticklabelsvisible = false, yticklabelsvisible = false, zticklabelsvisible = false,
-		titlevisible = !isempty(label), title = label, titlesize = labelsize, titlegap = 4, titlecolor = labelcolor)
+		xticklabelsvisible = false, yticklabelsvisible = false, zticklabelsvisible = false)
+	g === nothing || rowgap!(g, 2)
 	cells_mesh!(ax, x[keep] .- xc, y[keep] .- yc, z[keep] .- zc, r[keep], s[keep]; ghost = gh)
-	xlims!(ax, -bs, bs); ylims!(ax, -bs, bs); zlims!(ax, -bs, bs)
+	xlims!(ax, -bs, bs); ylims!(ax, -bs, bs)
+	flat ? zlims!(ax, minimum(z) - zc - 1.2, maximum(z) - zc + 1.2) : zlims!(ax, -bs, bs)
 	ax
 end;
 
@@ -346,16 +366,18 @@ end;
 
 A final 3D figure from its data folder (title.txt, panels.tsv, <panel>.csv). Each
 panel sits at (row, col) of panels.tsv and gets one axis row per view
-("top", "side", "front", "oblique", or several joined by "+"). An optional 7th
-column `bs` fixes the box half-width of that panel (the same value in every panel
-= the same scale); an empty title or label draws none. Unconfined aggregates (views
-top+front) are drawn whole with C translucent (GHOST), confined ones opaque with the
-mid-plane cutaway.
+("top", "side", "front", "oblique", or several joined by "+"; "arrow" draws a down
+arrow instead of cells, e.g. between the two rows of the fusion figure). An optional
+7th column `bs` fixes the box half-width of that panel (the same value in every panel
+= the same scale); an 8th column `ghost` = 1 draws the panel whole with C translucent
+(GHOST: unconfined aggregates), else opaque with the mid-plane cutaway. An empty title
+or label draws none; labels can hold LaTeX (\$...\$). All text in LaTeX's fonts.
 """
 function plot_panels(dir; size_ratio = 0.6, labelsize = 18)
 	lines_ = filter(l -> !isempty(strip(l)), readlines(joinpath(dir, "panels.tsv")))
 	pans = [split(l, '\t') for l in lines_[2:end]]       # panel, row, col, views, label, file[, bs]
 	pbs(p) = length(p) >= 7 && !isempty(strip(p[7])) ? parse(Float64, p[7]) : nothing
+	pghost(p) = length(p) >= 8 && strip(p[8]) == "1" ? GHOST : nothing
 	views(p) = Symbol.(split(p[4], "+"))
 	nrow = maximum(parse(Int, p[2]) for p in pans)
 	ncol = maximum(parse(Int, p[3]) for p in pans)
@@ -364,26 +386,31 @@ function plot_panels(dir; size_ratio = 0.6, labelsize = 18)
 	start = cumsum(vcat(1, nv[1:end-1]))
 	title = isfile(joinpath(dir, "title.txt")) ? strip(read(joinpath(dir, "title.txt"), String)) : ""
 	toff = isempty(title) ? 0 : 1
-	# a side view is flat: an axis row with only side views gets 40 % of the height
+	# a side view is flat: an axis row with only side views gets 45 % of the height, one
+	# with only arrows 30 %
 	h = round(Int, 470*size_ratio)
-	flat = [all(p -> parse(Int, p[2]) != i || length(views(p)) < jv || views(p)[jv] == :side, pans)
-			for i in 1:nrow for jv in 1:nv[i]]
-	fig = Figure(size = (round(Int, 520*size_ratio*ncol), sum(f ? round(Int, 0.4h) : h for f in flat) + 70*toff),
-				 figure_padding = 20)
+	rowkind(i, jv) = (vs = [views(p)[jv] for p in pans if parse(Int, p[2]) == i && length(views(p)) >= jv];
+					  all(==(:arrow), vs) ? 0.3 : all(in((:side, :arrow)), vs) ? 0.45 : 1.0)
+	frac = [rowkind(i, jv) for i in 1:nrow for jv in 1:nv[i]]
+	fig = Figure(size = (round(Int, 520*size_ratio*ncol), sum(round(Int, f*h) for f in frac) + 70*toff),
+				 figure_padding = 20, fonts = TEX_FONTS)
 	# the title shrinks to fit a narrow figure
 	W = round(Int, 520*size_ratio*ncol)
 	isempty(title) || Label(fig[1, 1:ncol], title; fontsize = min(labelsize + 6, round(Int, 1.8W / length(title))), font = :bold)
 	for p in pans
 		row, col = parse(Int, p[2]), parse(Int, p[3])
+		if views(p) == [:arrow]
+			Label(fig[toff + start[row], col], L"\downarrow"; fontsize = 3labelsize, tellwidth = false)
+			continue
+		end
 		c = load_panel(joinpath(dir, p[6]))
-		gh = (:top in views(p) && :front in views(p)) ? GHOST : nothing
 		for (jv, v) in enumerate(views(p))
-			draw_cells!(fig[toff + start[row] + jv - 1, col], c; view = v, bs = pbs(p), ghost = gh,
+			draw_cells!(fig[toff + start[row] + jv - 1, col], c; view = v, bs = pbs(p), ghost = pghost(p),
 						label = jv == 1 ? replace(p[5], "|" => "\n") : "", labelsize = labelsize)
 		end
 	end
-	for (j, f) in enumerate(flat)
-		f && rowsize!(fig.layout, toff + j, Fixed(round(Int, 0.4h)))
+	for (j, f) in enumerate(frac)
+		f < 1 && rowsize!(fig.layout, toff + j, Fixed(round(Int, f*h)))
 	end
 	isempty(title) || rowgap!(fig.layout, 1, 50)
 	fig
@@ -393,21 +420,24 @@ end;
 	write_panels(dir, title, panels; same_scale = false)
 
 Write a final figure's data folder. `panels` is a vector of NamedTuples
-(panel, row, col, views, label, cells, meta): cells has x, y, z, r, cell_state
-(e.g. one frame of load_frames), meta a NamedTuple saved in the .jld2.
+(panel, row, col, views, label, cells, meta[, ghost]): cells has x, y, z, r, cell_state
+(e.g. one frame of load_frames), meta a NamedTuple saved in the .jld2, ghost = true
+to draw the panel whole with C translucent (unconfined aggregates). A panel with
+views = "arrow" has no cells (cells = nothing).
 `same_scale` writes one box half-width (that of the largest panel) for every
 panel, so plot_panels draws them at the same scale.
 """
 function write_panels(dir, title, panels; same_scale = false)
 	mkpath(dir)
 	write(joinpath(dir, "title.txt"), title)
-	bs = same_scale ? @sprintf("%.3f", maximum(box_halfwidth(p.cells) for p in panels)) : ""
+	bs = same_scale ? @sprintf("%.3f", maximum(box_halfwidth(p.cells) for p in panels if p.cells !== nothing)) : ""
 	open(joinpath(dir, "panels.tsv"), "w") do io
-		println(io, "panel\trow\tcol\tviews\tlabel\tfile\tbs")
+		println(io, "panel\trow\tcol\tviews\tlabel\tfile\tbs\tghost")
 		for p in panels
 			c = p.cells
-			f = save_panel(dir, p.panel, c.x, c.y, c.z, c.r, c.cell_state; p.meta...)
-			println(io, join((p.panel, p.row, p.col, p.views, replace(p.label, "\n" => "|"), f, bs), '\t'))
+			f = c === nothing ? "" : save_panel(dir, p.panel, c.x, c.y, c.z, c.r, c.cell_state; p.meta...)
+			gh = hasproperty(p, :ghost) && p.ghost ? "1" : ""
+			println(io, join((p.panel, p.row, p.col, p.views, replace(p.label, "\n" => "|"), f, bs, gh), '\t'))
 		end
 	end
 	dir
@@ -694,7 +724,8 @@ function record_pancake_frames(d, color_map, ks; views = (:top, :side), fps = 8,
 		size_ratio = 0.8, filename = "movie.mp4", ghost = nothing, t0 = 0.0)
 	nmax = maximum(length(d.x[k]) for k in ks)
 	bs = maximum(max(maximum(d.x[k]) - minimum(d.x[k]), maximum(d.y[k]) - minimum(d.y[k])) for k in ks) / 2 + 2.0
-	fig = Figure(size = (round(Int, 600*size_ratio*length(views)), round(Int, 600*size_ratio)), figure_padding = 20)
+	fig = Figure(size = (round(Int, 600*size_ratio*length(views)), round(Int, 600*size_ratio)), figure_padding = 20,
+				 fonts = TEX_FONTS)
 	ttl = Observable("")
 	Label(fig[0, 1:length(views)], ttl; fontsize = 24)
 	# one sphere plot per part: :all (opaque; in the top view without ghost, the cutaway),
@@ -715,7 +746,7 @@ function record_pancake_frames(d, color_map, ks; views = (:top, :side), fps = 8,
 	obs = []
 	for (j, v) in enumerate(views)
 		ax = Axis3(fig[1, j], aspect = :data, azimuth = 0,
-			elevation = v == :top ? pi/2 : 2*pi + pi/32,
+			elevation = v == :top ? pi/2 : SIDE_ELEVATION,
 			xgridvisible = false, ygridvisible = false, zgridvisible = false,
 			xspinesvisible = false, yspinesvisible = false, zspinesvisible = false,
 			xticksvisible = false, yticksvisible = false, zticksvisible = false,
@@ -746,10 +777,11 @@ end;
 
 Redraw every final figure from figdir/data alone: each data/<figure>/ with a
 panels.tsv becomes figdir/<figure>.png; each data/phase_space*/ (phase_space.csv,
-free.csv, panels.tsv for the insets, readout.txt naming the class column to draw)
-becomes four charts, figdir/phase_space*.png (y = plate gap, x = log10 N0),
-*_N0.png (x = N0), *_diameter.png and *_diameter_N0.png (y = pancake diameter at
-squeezing, when phase_space.csv has the column D).
+free.csv, panels.tsv for the insets, readout.txt naming the class column to draw and,
+on its second line, the column that breaks ties between seeds) becomes three charts:
+figdir/phase_space*.png (x = log10 N0, y = number of layers, linear), *_lin.png (both
+axes linear) and *_diameter.png (y = pancake diameter at squeezing, when phase_space.csv
+has the column D).
 """
 function replot_figures(figdir; save_png = true)
 	figs = Dict{String,Any}()
@@ -757,12 +789,13 @@ function replot_figures(figdir; save_png = true)
 		dir = joinpath(figdir, "data", name)
 		isdir(dir) || continue
 		if startswith(name, "phase_space") && isfile(joinpath(dir, "phase_space.csv"))
-			# which readout to draw: readout.txt names the class column (default class_02)
-			ccol = isfile(joinpath(dir, "readout.txt")) ? String(strip(read(joinpath(dir, "readout.txt"), String))) : "class_02"
+			# which readout to draw: readout.txt names the class column (default class_02) and the
+			# tie-breaking one (default: the same readout at fB 0.12, class_..._012)
+			rl = isfile(joinpath(dir, "readout.txt")) ? filter(!isempty, strip.(readlines(joinpath(dir, "readout.txt")))) : String[]
+			ccol = isempty(rl) ? "class_02" : String(rl[1])
 			raw, hdr = readdlm(joinpath(dir, "phase_space.csv"), ','; header = true)
 			col = Dict(strip(String(hdr[i])) => i for i in eachindex(hdr))
-			# the same readout later (class_..._012), to break ties in the background
-			lcol = replace(ccol, r"_02$" => "_012")
+			lcol = length(rl) >= 2 ? String(rl[2]) : replace(ccol, r"_02$" => "_012")
 			rows = [(layers = Float64(raw[i, col["layers"]]), N0 = Int(raw[i, col["N0"]]),
 					 class = String(raw[i, col[ccol]]), D = haskey(col, "D") ? Float64(raw[i, col["D"]]) : NaN,
 					 late = haskey(col, lcol) ? String(raw[i, col[lcol]]) : String(raw[i, col[ccol]]))
@@ -787,9 +820,8 @@ function replot_figures(figdir; save_png = true)
 						 late = haskey(fc, lcol) ? String(raw[i, fc[lcol]]) : String(raw[i, fc[ccol]])) for i in 1:size(raw, 1)]
 			end
 			title = isfile(joinpath(dir, "title.txt")) ? strip(read(joinpath(dir, "title.txt"), String)) : ""
-			for (suffix, x, y) in (("", :log, :layers), ("_N0", :linear, :layers),
-								   ("_lin", :log, :layers_lin), ("_lin_N0", :linear, :layers_lin),
-								   ("_diameter", :log, :diameter), ("_diameter_N0", :linear, :diameter))
+			# the number of layers on a linear axis (Nov 3), and a version with both axes linear
+			for (suffix, x, y) in (("", :log, :layers_lin), ("_lin", :linear, :layers_lin), ("_diameter", :log, :diameter))
 				y == :diameter && !haskey(col, "D") && continue
 				# the outcomes by the names of the figures (PHASE_NAMES); the October readout counts rings as clusters too
 				lab = PHASE_NAMES

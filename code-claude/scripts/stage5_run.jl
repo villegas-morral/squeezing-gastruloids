@@ -112,7 +112,8 @@ for j in mine
 			res = fusion_assay(P.mu, P.f_att, P.f_rep; n = N0, hours = 24.0,
 							   pairs_ = [(2,2),(3,3),(2,3)], verbose = false, positions = pos)
 			file = joinpath(OUT, "fusion_$(cand).jld2")
-			jldsave(file; BB = pos["BB"], CC = pos["CC"], BC = pos["BC"], metric = res)
+			jldsave(file; BB = pos["BB"], CC = pos["CC"], BC = pos["BC"],           # after 24 h
+					BB_0 = pos["BB_0"], CC_0 = pos["CC_0"], BC_0 = pos["BC_0"], metric = res)   # and at the start
 			b = (res["BB"][3], res["CC"][3], res["BC"][3])
 			@printf("BB %.3f CC %.3f BC %.3f\n", b...)
 			open(io -> @printf(io, "%s,%s,%s,%g,%d,%d,true,%.0f,%d,NaN,-,-,-,-,-,NaN,0,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,%.4f,%.4f,%.4f,%s\n",

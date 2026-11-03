@@ -6,7 +6,7 @@
 # figdir defaults to code-claude/figures. Nothing is simulated or picked here: the
 # figure is drawn from the data that stage6_figures.jl wrote,
 #
-#   data/fig2_behaviours/   panel B (the same runs, frames at fB 0.6, 0.3, 0.2)
+#   data/fig2_behaviours/   panel B (the same runs, frames at fB 0.6, 0.3, 0.12)
 #   data/phase_space/       panel C (phase_space.csv, free.csv)
 #
 # and written to figdir/presentation.pdf (+ presentation.png, a preview).
@@ -114,15 +114,18 @@ b_dir = joinpath(DATA, "fig2_behaviours")
 pans = [split(l, '\t') for l in readlines(joinpath(b_dir, "panels.tsv"))[2:end] if !isempty(strip(l))]
 panel(row, col) = (p = only(filter(p -> p[2] == string(row) && p[3] == string(col), pans));
 				   (cells = load_panel(joinpath(b_dir, p[6])), meta = jldopen(f -> f["meta"], joinpath(b_dir, replace(p[6], ".csv" => ".jld2")))))
-COLS = (1, 3, 4)                     # fig2 columns: fB 0.6 (seeding), 0.3, 0.2 (readout)
+COLS = (1, 3, 5)                     # fig2 columns: fB 0.6 (seeding), 0.3, 0.12 (readout)
+COL_FB = (0.6, 0.3, 0.12)
 ROWS = ((1, "no\nconfinement", :top), (2, "medium\nconfinement", :oblique), (3, "strong\nconfinement", :oblique))
 
 p_dir = joinpath(DATA, "phase_space")
-# the readout the phase-space figure draws (readout.txt; class_02 for the October figures)
-ccol = isfile(joinpath(p_dir, "readout.txt")) ? String(strip(read(joinpath(p_dir, "readout.txt"), String))) : "class_02"
+# the readout the phase-space figure draws (readout.txt: the class column, then the one that
+# breaks ties between seeds; class_02 for the October figures)
+rl = filter(!isempty, strip.(readlines(joinpath(p_dir, "readout.txt"))))
+ccol = String(rl[1])
 raw, hdr = readdlm(joinpath(p_dir, "phase_space.csv"), ','; header = true)
 col = Dict(strip(String(hdr[i])) => i for i in eachindex(hdr))
-lcol = replace(ccol, r"_02$" => "_012")      # the same readout later: breaks ties in the background
+lcol = length(rl) >= 2 ? String(rl[2]) : replace(ccol, r"_02$" => "_012")
 rows = [(layers = Float64(raw[i, col["layers"]]), N0 = Int(raw[i, col["N0"]]), class = String(raw[i, col[ccol]]),
 		 late = haskey(col, lcol) ? String(raw[i, col[lcol]]) : String(raw[i, col[ccol]])) for i in 1:size(raw, 1)]
 # the pancake area at squeezing, for the iso-area lines
@@ -190,7 +193,7 @@ arrow!(page, (colx(1) - 5, yt), (W - 18, yt); head = 8, linewidth = 1.2)
 for j in eachindex(COLS)
 	x = colx(j) + 70
 	lines!(page, [x, x], [yt - 4, yt + 4]; color = :black, linewidth = 1.2)
-	fB = (0.6, 0.3, 0.2)[j]
+	fB = COL_FB[j]
 	text!(page, x, yt - 7; text = @sprintf("%.0f h   (T+ %.0f %%)", hours[j], 100fB), align = (:center, :top), fontsize = 9)
 end
 text!(page, W - 18, yt + 5; text = "time", align = (:right, :bottom), fontsize = 11)
@@ -199,10 +202,10 @@ text!(page, W - 18, yt + 5; text = "time", align = (:right, :bottom), fontsize =
 letter(28, 382, "C")
 # the same chart as the report's phase space (November): the regions' colours and the
 # iso-area lines; stretched to the width of the page (no equal aspect)
-axC = phase_space!(fig, rows; free = free, x = :log, y = :layers, colors = REGION, background = 0.5,
+axC = phase_space!(fig, rows; free = free, x = :log, y = :layers_lin, colors = REGION, background = 0.5,
 				   fontsize = 12, contours = cont, contour_width = 1.4, contour_labelsize = 7,
 				   axis = (bbox = BBox(80, 575, 50, 372), aspect = nothing))
-# the readout frames of the rows of B (fig2 column 4), each titled with its outcome in the
+# the readout frames of the rows of B (fig2 column 5), each titled with its outcome in the
 # colour of its region and placed on that region, at (u, v) in the chart's coordinates
 # (N0 across 0-10, the gap up 0-8, the unconfined row at 9.4; phase_space!)
 Makie.update_state_before_display!(fig)
@@ -210,7 +213,7 @@ vp = axC.scene.viewport[]
 lim = axC.finallimits[]
 topage(u, v) = (vp.origin[1] + (u - lim.origin[1]) / lim.widths[1] * vp.widths[1],
 				vp.origin[2] + (v - lim.origin[2]) / lim.widths[2] * vp.widths[2])
-for (pnl, cls, (u, v)) in (((1, 4), "POLARISED", (1.8, 6.0)), ((2, 4), "CENTRAL", (8.7, 6.0)), ((3, 4), "PATTERN", (7.6, 1.0)))
+for (pnl, cls, (u, v)) in (((1, 5), "POLARISED", (1.8, 6.0)), ((2, 5), "CENTRAL", (8.7, 6.0)), ((3, 5), "PATTERN", (8.6, 1.0)))
 	cx, cy = topage(u, v)
 	cells3d!(fig, panel(pnl...).cells; view = :top, bbox = BBox(cx - 60, cx + 60, cy - 50, cy + 50),
 			 ghost = cls == "POLARISED" ? GHOST : nothing)

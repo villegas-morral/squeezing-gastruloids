@@ -38,13 +38,29 @@ const BASE  = String(split(CAND, "@")[1]) # "x@lw3" -> "x": unconfined runs and 
 # since our aggregates are 10-100 times smaller (with 20, monolayers of N0 <= 300 have
 # no cluster at all), and a core cell needs half its neighbours B instead of their
 # 40 % (CORE_FRAC, stage5_common.jl: rings held together by thin B threads count as
-# clusters). The October classifier (class_02), the experiments' 40 % (class_exp10_02)
-# and their strict version (class_exp_02) are drawn too, for comparison.
-const CCOL  = "class_exp50_02"
-const CCOL_LATE = "class_exp50_012"
+# clusters). Since Nov 3 it is read at fB = 0.12 (READ_FB; the experiments read at 96 h, with
+# ~12 % T+), with three outcomes only: a run with no B cluster left there takes its last
+# outcome (class_read, stage5_common.jl). The same readout at fB 0.2 (class_exp50_02) and
+# the October classifier (class_02) are drawn too, for comparison.
+const CCOL  = "class_read"
+const CCOL_LATE = "class_read_late"
+const READ_FB = 0.12
 
 fB_of(d, k) = count(==(2), d.cell_state[k]) / length(d.cell_state[k])
 cells(d, k) = (x = d.x[k], y = d.y[k], z = d.z[k], r = d.r[k], cell_state = d.cell_state[k])
+
+"""
+The frame the outcome is read from (class_read, stage5_common.jl): fB 0.12, else 0.15, as long as
+at least half of the B cells are in clusters there (READ_MIN_CL); else fB 0.2.
+"""
+function read_frame(d)
+	for f in (READ_FB, 0.15)
+		k = frame_at(d, f)
+		e = exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10, frac = CORE_FRAC)
+		e.n_cl > 0 && e.f_cl >= READ_MIN_CL && return k
+	end
+	frame_at(d, 0.2)
+end
 
 """
 Rotate a configuration so that the B centroid lies along +x from the centre: about z
@@ -135,8 +151,9 @@ function write_data()
 		end
 		r === nothing && continue
 		d = load(r); k = frame_at(d, 0.6)
-		push!(pans, (panel = "ic_$(CORE)_$(kind)", row = 1, col = col, views = kind == "free" ? "top+front" : "top+side",
-					 label = "", cells = cells(d, k), meta = meta(r, d, k)))
+		# one view each (Nov 3): the pancake obliquely, the sphere from the front, whole with C translucent
+		push!(pans, (panel = "ic_$(CORE)_$(kind)", row = 1, col = col, views = kind == "free" ? "front" : "oblique",
+					 label = "", cells = cells(d, k), meta = meta(r, d, k), ghost = kind == "free"))
 	end
 	write_panels(joinpath(DATA, "fig1_initial_condition"), "", pans; same_scale = true)
 
@@ -155,15 +172,15 @@ function write_data()
 		for (j, f) in enumerate(fBs)
 			k = frame_at(d, f)
 			c = confined ? cells(d, k) : align_B(cells(d, k); confined = false, ref = cells(d, kend))
-			where_ = confined ? "$(lname(r["layers"])), N0 $(r["N0"])" : "unconfined, N0 $(r["N0"])"
+			where_ = confined ? "$(lname(r["layers"])), \$N_0 = $(r["N0"])\$" : "unconfined, \$N_0 = $(r["N0"])\$"
 			lbl = (j == 1 ? "$name: $where_|" : "|") *
-				  @sprintf("t = %.0f h, fB = %.2f%s", hrs(d, k), fB_of(d, k), f == 0.2 ? "  (readout)" : "")
-			push!(pans, (panel = "row$(row)_$(j)", row = row, col = j, views = confined ? "top+side" : "top+front",
-						 label = lbl, cells = c, meta = meta(r, d, k)))
+				  @sprintf("\$t = %.0f\$ h, \$f_B = %.2f\$%s", hrs(d, k), fB_of(d, k), f == READ_FB ? " (readout)" : "")
+			# confined: top and side views; unconfined: one view, from the front (B to the side), whole
+			push!(pans, (panel = "row$(row)_$(j)", row = row, col = j, views = confined ? "top+side" : "front",
+						 label = lbl, cells = c, meta = meta(r, d, k), ghost = !confined))
 		end
 	end
-	write_panels(joinpath(DATA, "fig2_behaviours"),
-				 "No, medium and strong confinement (top and side views)", pans)
+	write_panels(joinpath(DATA, "fig2_behaviours"), "", pans)     # no title: the report's caption says it
 
 	# ---- fig3: the patterns at the readout --------------------------------------------
 	# every thickness that has patterns: its largest N0 first, then its smallest, up to 8
@@ -174,16 +191,14 @@ function write_data()
 	pats = sort(pats[1:min(end, 8)]; by = r -> (r["layers"], r["N0"]))
 	pans = NamedTuple[]
 	for (i, r) in enumerate(pats[1:min(end, 8)])
-		d = load(r); k = frame_at(d, 0.2)
+		d = load(r); k = read_frame(d)
 		st = pattern_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k])
 		ex = exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10, frac = CORE_FRAC)
 		push!(pans, (panel = @sprintf("L%g_N%d", r["layers"], r["N0"]), row = 1 + (i - 1) ÷ 4, col = 1 + (i - 1) % 4,
-					 views = "top", label = @sprintf("%s, N0 %d|%d clusters, N_eff = %.1f, S = %.2f", lname(r["layers"]), r["N0"],
-											ex.n_cl, ex.N_eff, st.S),
+					 views = "top", label = @sprintf("%s, \$N_0 = %d\$", lname(r["layers"]), r["N0"]),
 					 cells = cells(d, k), meta = meta(r, d, k)))
 	end
-	write_panels(joinpath(DATA, "fig3_patterns"),
-				 "B patterns at the readout fB = 0.2 (seed 1, top view, cut at the mid-plane)", pans)
+	write_panels(joinpath(DATA, "fig3_patterns"), "", pans)
 
 	# ---- fig4: unconfined aggregates of every size, at the readout ---------------------------
 	# (the "free" row of the phase space): B polarises up to N0 ~ 600, bigger ones are
@@ -192,28 +207,30 @@ function write_data()
 	for (j, N0) in enumerate((150, 300, 600, 1200, 2400))
 		i = pick(trow, "free", 0, N0; seed = 1)
 		i === nothing && continue
-		r = trow[i]; d = load(r); k = frame_at(d, 0.2)
+		r = trow[i]; d = load(r); k = frame_at(d, READ_FB)
 		ex = exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10, frac = CORE_FRAC)
-		push!(pans, (panel = "free_N$(N0)", row = 1, col = j, views = "top+front",
-					 label = @sprintf("N0 %d, fB = %.2f|%s, P = %.2f", N0, fB_of(d, k), lowercase(classify_exp(ex)), ex.P),
-					 cells = align_B(cells(d, k); confined = false), meta = meta(r, d, k)))
+		push!(pans, (panel = "free_N$(N0)", row = 1, col = j, views = "front",
+					 label = @sprintf("\$N_0 = %d\$; \$P = %.2f\$|\$t = %.0f\$ h", N0, ex.P, hrs(d, k)),
+					 cells = align_B(cells(d, k); confined = false), meta = meta(r, d, k), ghost = true))
 	end
-	write_panels(joinpath(DATA, "fig4_unconfined"),
-				 "Unconfined aggregates at the readout fB = 0.2 (C translucent; top and front views)", pans)
+	write_panels(joinpath(DATA, "fig4_unconfined"), "", pans)
 
 	# ---- fig5: the fusion assay -------------------------------------------------------
-	ff = joinpath(S5, "tune", "fusion_$(BASE).jld2")
+	# (Nov 3: results/stage5/fusion_nov3 has the starting doublets too; tune/ only the final ones)
+	ff = first(filter(isfile, [joinpath(S5, "fusion_nov3", "fusion_$(BASE).jld2"), joinpath(S5, "tune", "fusion_$(BASE).jld2")]))
 	if isfile(ff)
 		pans = NamedTuple[]
 		jldopen(ff, "r") do fh
 			m = fh["metric"]
 			for (j, pr) in enumerate(("BB", "CC", "BC"))
-				c = fh[pr]
-				# November: only the side view, titled "BB fusion" etc., no figure title
-				push!(pans, (panel = "doublet_$(pr)", row = 1, col = j, views = "front",
-							 label = "$pr fusion",
-							 cells = c, meta = (assay = "fusion_assay(n = 150, hours = 24)", pair = pr,
-												t0 = m[pr][1], h12 = m[pr][2], h24 = m[pr][3], cand = CAND)))
+				me = (assay = "fusion_assay(n = 150, hours = 24)", pair = pr, t0 = m[pr][1], h12 = m[pr][2], h24 = m[pr][3], cand = CAND)
+				# one column per pair: the two aggregates placed for fusion, an arrow, the doublet after 24 h
+				haskey(fh, pr * "_0") && push!(pans, (panel = "start_$(pr)", row = 1, col = j, views = "front",
+													 label = "\$$(pr)\$", cells = fh[pr * "_0"], meta = me))
+				haskey(fh, pr * "_0") && push!(pans, (panel = "arrow_$(pr)", row = 2, col = j, views = "arrow",
+													 label = "", cells = nothing, meta = me))
+				push!(pans, (panel = "doublet_$(pr)", row = haskey(fh, pr * "_0") ? 3 : 1, col = j, views = "front",
+							 label = haskey(fh, pr * "_0") ? "" : "\$$(pr)\$", cells = fh[pr], meta = me))
 			end
 		end
 		write_panels(joinpath(DATA, "fig5_fusion"), "", pans)
@@ -229,7 +246,8 @@ function write_data()
 			k = frame_at(d, f); c = cells(d, k)
 			ex = exp_stats(c.x, c.y, c.z, c.cell_state; nmin = 10, frac = CORE_FRAC)
 			push!(pans, (panel = "f$(j)", row = 1, col = j, views = "top+side",
-						 label = @sprintf("fB %.2f, t %.0f h|%s, N_eff %.1f", fB_of(d, k), hrs(d, k), lowercase(classify_exp(ex)), ex.N_eff),
+						 label = @sprintf("\$f_B = %.2f\$, \$t = %.0f\$ h|%s, \$N_\\mathrm{eff} = %.1f\$", fB_of(d, k), hrs(d, k),
+										  lowercase(classify_exp(ex)), ex.N_eff),
 						 cells = c, meta = (run = basename(file), frame = k, t = d.t[k], hours = hrs(d, k), fB = fB_of(d, k))))
 		end
 		write_panels(joinpath(DATA, fname), "", pans)
@@ -239,19 +257,19 @@ function write_data()
 	ns = [count(r -> (r["layers"], r["N0"]) == p, phase) for p in unique((r["layers"], r["N0"]) for r in phase)]
 	nseed_txt = minimum(ns) == maximum(ns) ? "$(minimum(ns)) seeds" : "$(minimum(ns))–$(maximum(ns)) seeds per point"
 	# no titles on the charts (November): the readout is in readout.txt and the reports' captions
-	for (folder, ccol, fread, ttl) in (("phase_space", CCOL, 0.2, ""),
-									   ("phase_space_late", CCOL_LATE, 0.12, ""),
-									   ("phase_space_classic", "class_02", 0.2, ""),
-									   ("phase_space_exp20", "class_exp_02", 0.2, ""),
-									   ("phase_space_core40", "class_exp10_02", 0.2, ""))
+	# readout.txt: the class column, then the column that breaks ties between seeds (what wins later)
+	for (folder, ccol, lcol, fread, ttl) in (("phase_space", CCOL, CCOL_LATE, nothing, ""),
+											 ("phase_space_fB20", "class_exp50_02", "class_exp50_012", 0.2, ""),
+											 ("phase_space_classic", "class_02", "class_012", 0.2, ""))
 		dir = joinpath(DATA, folder); mkpath(dir)
-		write(joinpath(dir, "readout.txt"), ccol)
+		write(joinpath(dir, "readout.txt"), ccol * "\n" * lcol * "\n")
 		write(joinpath(dir, "title.txt"), ttl)
 		# A_um2: the pancake area at squeezing, pi (D r)^2 with r = 5 um (D in cell diameters)
 		for r in phase; r["A_um2"] = round(pi * r["D"]^2 * 25; digits = 1); end
 		keys_ = ["layers", "N0", "seed", "D", "A_um2", "class_04", "class_03", "class_02", "class_015", "class_012",
 				 "class_exp_04", "class_exp_03", "class_exp_02", "class_exp_015", "class_exp_012", "class_exp10_02", "class_exp10_012",
-				 "class_exp50_02", "class_exp50_012", "t_02", "n_isl", "f_isl", "f_iso", "f_max", "S", "spread", "fill", "offset", "offset_max",
+				 "class_exp50_02", "class_exp50_015", "class_exp50_012", "class_exp50_010",
+				 "class_read", "class_read_late", "f_cl50_02", "f_cl50_015", "f_cl50_012", "f_cl50_010", "t_02", "n_isl", "f_isl", "f_iso", "f_max", "S", "spread", "fill", "offset", "offset_max",
 				 "n_cl", "N_eff", "f_cl", "P", "n_cl10", "N_eff10", "n_cl50", "N_eff50", "layers_eff", "N_end", "file"]
 		open(joinpath(dir, "phase_space.csv"), "w") do io
 			println(io, join(keys_, ","))
@@ -261,7 +279,7 @@ function write_data()
 		end
 		# the unconfined runs of the same mechanics (no plates): the "free" row of the chart
 		fkeys = ["class_02", "class_012", "class_exp_02", "class_exp_012", "class_exp10_02", "class_exp10_012",
-				  "class_exp50_02", "class_exp50_012"]
+				  "class_exp50_02", "class_exp50_015", "class_exp50_012", "class_exp50_010", "class_read", "class_read_late"]
 		open(joinpath(dir, "free.csv"), "w") do io
 			println(io, "N0,seed,", join(fkeys, ","), ",offset,P,file")
 			grid_N0 = Set(r["N0"] for r in phase)      # only the N0 values of the grid
@@ -277,7 +295,7 @@ function write_data()
 			println(io, "panel\tlayers\tN0\tviews\tlabel\tfile")
 			for (key, cls) in (("POLARISED", "POLARISED"), ("CENTRAL_INSET", "CENTRAL"), ("PATTERN_INSET", "PATTERN"))
 				r = get(EX, key, nothing); r === nothing && continue
-				d = load(r); k = frame_at(d, fread)
+				d = load(r); k = fread === nothing ? read_frame(d) : frame_at(d, fread)
 				c = cls == "POLARISED" ? align_B(cells(d, k); confined = false) : cells(d, k)
 				f = save_panel(dir, "inset_$(lowercase(cls))", c.x, c.y, c.z, c.r, c.cell_state; meta(r, d, k)...)
 				println(io, join((lowercase(cls), r["layers"], r["N0"], "top+side", PHASE_NAMES[cls], f), '\t'))

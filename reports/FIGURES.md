@@ -38,7 +38,7 @@ Views:
 - **front**: the side view turned 90°
 
 **Unconfined aggregates** (panels with the views top+front, the Polarisation inset, the unconfined and
-polarised movies) are drawn whole, B opaque and C at alpha 0.3 (`GHOST`; 0.2 until the second Nov 2 round), so the B core shows through
+polarised movies) are drawn whole, B opaque and C at alpha 0.5 (`GHOST`; 0.2, then 0.3 on Nov 2, 0.5 since Nov 3), so the B core shows through
 (November 2026, second round). As in your original `plot_pancake`: one meshscatter with RGBA colours, B
 first, no `transparency = true` (its order-independent blending turned many translucent layers dark brown,
 the first version of Nov 2). This needs **GLMakie**, rendered in a small hidden window at full output
@@ -65,10 +65,13 @@ Shared by every run (`run_confined` / `run_unconfined` in the notebook; batch: `
    - B → C at the constant rate `q`, with division on
    - run until the B fraction drops to 0.10, or `tf` = 900 time units
    - one frame saved per hour (15 time units)
-5. **Readout**: the first saved frame with B fraction ≤ 0.2 (≈ 96 h in the experiments). Since November
-   it is classified like the experiments, by `classify_exp` with clusters of ≥ 10 cells and core cells
-   with at least half B neighbours (column `class_exp50_02`; the experiments' 40 % is `class_exp10_02`).
-   Before that it was `classify_pattern` (`class_02`). See MODEL.md §7 and the November report §3.
+5. **Readout** (since Nov 3): the first saved frame with B fraction ≤ 0.12, about 26 h after the start of
+   differentiation (the experiments read at 96 h, 24 h after squeezing, with ~12 % T+). It is classified
+   like the experiments, by `classify_exp` with clusters of ≥ 10 cells and core cells with at least half B
+   neighbours. If fewer than half of the B cells are in clusters there, B is differentiating away and the
+   run takes its outcome at fB 0.15, else at 0.2 (`read_outcome`, `READ_MIN_CL` in `stage5_common.jl`;
+   column `class_read`). Three outcomes only. Until Nov 2 the readout was at fB 0.2 (`class_exp50_02`),
+   before November with `classify_pattern` (`class_02`). See the November report, "Reading the outcome".
 
 **Settings:**
 - Rigid plates and `dt` = 0.015.
@@ -143,17 +146,18 @@ time. One run per row:
 
 ### fig3_patterns
 
-**What:** the B pattern at the readout (fB = 0.2), seed 1, at points whose majority is PATTERN.
+**What:** the B pattern at the readout frame (`read_frame`: fB 0.12, or 0.15 / 0.2 for runs whose islands
+have differentiated away by then; the panel title gives its fB), seed 1, at points whose majority is PATTERN.
 - **Which points:** every thickness that has patterns, with its largest N0, then its smallest, then the rest,
   up to 8 points. Thinnest slabs first.
 - **View:** top only.
-- **Labels:** the number of clusters and N_eff (`exp_stats`, clusters ≥ 10 cells) and the looseness S.
+- **Labels:** fB, the number of clusters and N_eff (`exp_stats`, clusters ≥ 10 cells). No figure title.
 
 ### fig4_unconfined
 
 **What:** the polarisation check, and the "free" row of the phase space. It shows unconfined aggregates of
 N0 150, 300, 600, 1200 and 2400 (seed 1, final mechanics, no plates so no friction) at the readout
-fB = 0.2:
+fB = 0.12 (no figure title):
 - **Labels:** the class and the polarisation P (`classify_exp`, `exp_stats`).
 - **Views:** top and front (the whole aggregate).
 - **Orientation:** rotated so that B points to +x.
@@ -193,23 +197,23 @@ the class (`classify_exp`, clusters ≥ 10) and N_eff.
 - **Seeds 1 at the screen points** are the screen runs themselves (copied in from `thick/`).
 
 The Oct 7 set (`figures-oct7/`) used 3 seeds, 5 at the smallest points, and three refinement rounds.
-- **Outcome:** at the readout fB = 0.2, the column named in `readout.txt`: since November `class_exp50_02`
-  (experiment-like with 10-cell clusters and a 50 % core fraction, `CORE_FRAC` in stage5_common.jl). The classes, as named in the figures (`PHASE_NAMES`):
+- **Outcome:** the column named on the first line of `readout.txt`: since Nov 3 `class_read` (the readout
+  at fB 0.12 above). The classes, as named in the figures (`PHASE_NAMES`):
   - **Polarisation**
   - **B-centroid**: the central cluster (with this readout, an unbroken ring too)
   - **Clusters**: B split into clusters
-  - other
 - **Other readouts, same runs:**
+  - `phase_space_fB20/`: the same rule at fB 0.2 (`class_exp50_02`, the readout of Nov 2)
   - `phase_space_classic/`: the October readout (`class_02`, rings count as patterns)
-  - `phase_space_exp20/`: the experiments' rule with their 20-cell minimum (`class_exp_02`)
-  - `phase_space_core40/`: the experiments' 40 % core fraction with the 10-cell minimum (`class_exp10_02`)
+  - (Nov 2's `phase_space_late`, `_exp20` and `_core40` were dropped on Nov 3.)
 - **Background only** (November: no pies, threshold lines or letters; `phase_space!` keywords `pies`,
   `thresholds`, `letters` bring them back): the majority outcome of the nearest point. A tie between seeds
-  goes to the outcome that wins later, in the same readout at fB 0.12 (`class_exp50_012`).
+  goes to the outcome that wins later: the column on the second line of `readout.txt` (`class_read_late`,
+  the same rule from fB 0.10, the end of the runs).
 - **Colours** (`PHASE_COLORS`): your sketch's grey (Polarisation), cyan (B-centroid) and pink (Clusters),
   at opacity 0.5, the same as the overview. Text 28 pt, area lines 3 pt.
-- **Axes:** $\log_{10} N_0$ (or $N_0$) and "$n_\mathrm{layers}$ (log scale)", ticks at 1, 2, 3, 4, 6, 8, 12 layers
-  (or $n_\mathrm{layers}$ on a linear scale), LaTeX labels;
+- **Axes:** $\log_{10} N_0$ (or $N_0$) and $n_\mathrm{layers}$ on a linear scale (Nov 3; `y = :layers` still
+  gives the log scale), LaTeX labels;
   all text in Computer Modern (`TEX_FONTS`). No chart title.
 - **Insets:** one example per outcome, titled with its name in the colour of its region (top + side views),
   readout frames, seed 1:
@@ -220,7 +224,8 @@ The Oct 7 set (`figures-oct7/`) used 3 seeds, 5 at the smallest points, and thre
   - `layers`, `N0`, `seed`
   - `D` (pancake diameter at squeezing, cell diameters) and `A_um2` (its area, π(D r)², r = 5 µm)
   - the classes at fB 0.4 / 0.3 / 0.2 / 0.15 / 0.12: October (`class_*`) and experiment-like
-    (`class_exp_*`; `class_exp10_*` with the 10-cell minimum; `class_exp50_*` with a 50 % core fraction)
+    (`class_exp_*`; `class_exp10_*` with the 10-cell minimum; `class_exp50_*` with a 50 % core fraction,
+    also at 0.10), the share of B in clusters `f_cl50_*`, and the readout `class_read`, `class_read_late`
   - the readout statistics (`n_isl`, `f_isl`, `f_iso`, `f_max`, `S`, `spread`, `fill`, `offset`,
     `offset_max`; experiment-like: `n_cl`, `N_eff`, `f_cl`, `P`, `n_cl10`, `N_eff10`, `n_cl50`, `N_eff50`)
   - the final thickness `layers_eff` and the cell count `N_end`
@@ -233,19 +238,16 @@ The Oct 7 set (`figures-oct7/`) used 3 seeds, 5 at the smallest points, and thre
 - unconfined runs at the grid N0 values from 150 up, 2 seeds each (3 at N0 849 and 1200, 1 at 4800; `free.csv`)
 - what a gap much wider than the aggregate tends to
 
-**Six versions** (four on Oct 8, the linear ones in November). `replot_figures` draws every phase-space
-folder six times, with the same runs, pies, background and thresholds:
+**Three versions** (Nov 3; there were six). `replot_figures` draws every phase-space folder three times,
+with the same runs and background:
 
 | file | x | y |
 |---|---|---|
-| `phase_space.png` | log₁₀ N0 (as in your sketch) | plate gap, in cell layers (log₂ scale; said on the axis) |
-| `phase_space_N0.png` | N0 | plate gap (log scale) |
-| `phase_space_lin.png` | log₁₀ N0 | plate gap (linear) |
-| `phase_space_lin_N0.png` | N0 | plate gap (linear) |
+| `phase_space.png` | log₁₀ N0 (as in your sketch) | number of layers (linear) |
+| `phase_space_lin.png` | N0 (linear) | number of layers (linear) |
 | `phase_space_diameter.png` | log₁₀ N0 | pancake diameter at squeezing (log scale) |
-| `phase_space_diameter_N0.png` | N0 | pancake diameter at squeezing |
 
-The iso-area lines are drawn on the four plate-gap versions.
+The iso-area lines are drawn on the two plate-gap versions.
 
 - **The pancake diameter** is measured on each run at the seeding frame, after growth and the 100-unit
   relaxation, which is the moment of squeezing in the model. It is 2√(2⟨ρ²⟩) + 2r, where ρ is the in-plane
@@ -256,13 +258,10 @@ The iso-area lines are drawn on the four plate-gap versions.
   sit close together, so a pie is smaller where its neighbours are close.
 - **The unconfined row** stays on top in every version, above a white break.
 
-### phase_space_late
+### phase_space_fB20
 
-**What:** the same runs and chart, read later, at fB = 0.12, where the class column is `class_012`
-(`readout.txt`). The insets are the same examples at fB = 0.12. It shows which outcomes are still on their
-way at the readout:
-- rings that break into islands
-- big aggregates that polarise late
+**What:** the same runs and chart, read earlier, at fB = 0.2 (`class_exp50_02`, tie-break `class_exp50_012`):
+the readout of Nov 2. The insets are the same examples at fB = 0.2.
 
 ### presentation.pdf
 
@@ -282,9 +281,9 @@ julia --project=. code-claude/scripts/stage7_presentation.jl
   All drawn as vector shapes.
 - **B, the same aggregate under no, medium and strong confinement:**
   - Runs: the three rows of `fig2_behaviours`.
-  - Columns: frames at fB 0.6 (seeding), 0.3 and 0.2 (readout). The time axis gives their times in hours,
+  - Columns: frames at fB 0.6 (seeding), 0.3 and 0.12 (readout). The time axis gives their times in hours,
     taken from the medium row; the B fraction falls at the same rate in every run.
-  - Views: the unconfined row is seen from above, whole, C at alpha 0.3; the confined rows from a
+  - Views: the unconfined row is seen from above, whole, C at alpha 0.5; the confined rows from a
     three-quarter view, cut at the mid-plane. Each panel is rendered with GLMakie and placed as an image,
     its white background made transparent.
   - Scale: each panel fits its aggregate.
@@ -306,7 +305,7 @@ julia --project=. code-claude/scripts/stage7_presentation.jl
 - **Runs:** central (4 layers, N0 600), pattern (1 layer, N0 600), pattern in a thick slab (3 layers,
   N0 2400), polarised (8 layers, N0 300) and unconfined (N0 600), all seed 1.
 - **Frames:** one per hour, from seeding to fB = 0.10.
-- **Views:** top and side; unconfined and polarised whole with C at alpha 0.3, the others cut at the
+- **Views:** top and side; unconfined and polarised whole with C at alpha 0.5, the others cut at the
   mid-plane. The title gives the hours from the start of differentiation.
 - **Made by** `record_pancake_frames`, the array version of your `record_pancake`.
 - **Data:** the trajectories, from seeding on, are in `figures/data/movies/*.jld2` (`load_frames` reads them).

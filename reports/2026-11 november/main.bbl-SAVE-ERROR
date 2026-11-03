@@ -1,0 +1,115 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nyt/global//global/global/global}
+    \entry{oriola}{article}{}{}
+      \name{author}{9}{}{%
+        {{un=0,uniquepart=base,hash=2536a3e4d2b7ae9bb1d076ae7be96c38}{%
+           family={Oriola},
+           familyi={O\bibinitperiod},
+           given={David},
+           giveni={D\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=6b902ff63ebaeae066b3b7716398af49}{%
+           family={Torregrosa-Cortés},
+           familyi={T\bibinithyphendelim C\bibinitperiod},
+           given={Gabriel},
+           giveni={G\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=3931acbf797af49133d5e00c2bc5c763}{%
+           family={Samatas},
+           familyi={S\bibinitperiod},
+           given={Sotiris},
+           giveni={S\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=54c0b6dad5dea69fbf35d46ebfac99b8}{%
+           family={Arató},
+           familyi={A\bibinitperiod},
+           given={Krisztina},
+           giveni={K\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=6c183c23ef82a5e1ab75407e43d0864c}{%
+           family={Fernández-Munuera},
+           familyi={F\bibinithyphendelim M\bibinitperiod},
+           given={David},
+           giveni={D\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=79d3ca97336ab1d60a578af463fca619}{%
+           family={Hahn},
+           familyi={H\bibinitperiod},
+           given={Elisa\bibnamedelima Maria},
+           giveni={E\bibinitperiod\bibinitdelim M\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=85b25d4cfd8e226f6c6c03488217b733}{%
+           family={Anlaş},
+           familyi={A\bibinitperiod},
+           given={Kerim},
+           giveni={K\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=d46603651ca6d2c90b6228e4727343fc}{%
+           family={Garcia-Ojalvo},
+           familyi={G\bibinithyphendelim O\bibinitperiod},
+           given={Jordi},
+           giveni={J\bibinitperiod},
+           givenun=0}}%
+        {{un=0,uniquepart=base,hash=3ef2bf0928a2b85a50f42082cf9196a6}{%
+           family={Trivedi},
+           familyi={T\bibinitperiod},
+           given={Vikas},
+           giveni={V\bibinitperiod},
+           givenun=0}}%
+      }
+      \list{publisher}{1}{%
+        {Cold Spring Harbor Laboratory}%
+      }
+      \strng{namehash}{1c7e9e6c918c4af2bdf2cc7cbe8d3a93}
+      \strng{fullhash}{0c44cc260113e54e3cde5a0cb6d40945}
+      \strng{fullhashraw}{0c44cc260113e54e3cde5a0cb6d40945}
+      \strng{bibnamehash}{1c7e9e6c918c4af2bdf2cc7cbe8d3a93}
+      \strng{authorbibnamehash}{1c7e9e6c918c4af2bdf2cc7cbe8d3a93}
+      \strng{authornamehash}{1c7e9e6c918c4af2bdf2cc7cbe8d3a93}
+      \strng{authorfullhash}{0c44cc260113e54e3cde5a0cb6d40945}
+      \strng{authorfullhashraw}{0c44cc260113e54e3cde5a0cb6d40945}
+      \field{sortinit}{O}
+      \field{sortinithash}{2cd7140a07aea5341f9e2771efe90aae}
+      \field{extradatescope}{labelyear}
+      \field{labeldatesource}{}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{journaltitle}{bioRxiv}
+      \field{title}{Collective fate decisions and cell rearrangements underlie gastruloid symmetry breaking}
+      \field{year}{2026}
+      \verb{doi}
+      \verb 10.1101/2024.12.16.628776
+      \endverb
+      \verb{eprint}
+      \verb https://www.biorxiv.org/content/early/2026/02/24/2024.12.16.628776.full.pdf
+      \endverb
+      \verb{urlraw}
+      \verb https://www.biorxiv.org/content/early/2026/02/24/2024.12.16.628776
+      \endverb
+      \verb{url}
+      \verb https://www.biorxiv.org/content/early/2026/02/24/2024.12.16.628776
+      \endverb
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

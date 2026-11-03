@@ -40,14 +40,46 @@ Figure: `../claude-answers/img/03-looseness.png`.
 
 ### A5. The B–B range μ_BB = 1.9 (patterns in slabs of 3+ layers)
 
-With μ_BB = 2, every slab of 3 or more layers ended as one compact central cluster, whatever we tried: B 65 %,
-B scattered outside the core, C mixed into it (the July seeding), spring plates, friction 5, the July
-mechanics, λ × 2–4. What matters is the cohesion of B: the adhesion energy W = f_att·2r·A(μ),
-A(μ) = (1+μ)ln μ − 2(μ−1). μ_BB 2 → 1.9 lowers W_BB from 1.02 to 0.79, still above W_CC = 0.65: a large core in a
-thick slab then hollows into a ring and breaks into islands, while small cores stay compact. At μ_BB = 1.85
-(W_BB ≈ W_CC), B simply dissolves into C. Keeping W_BB = 1.02 with a shorter range keeps the core compact,
-so it is the energy and not the range.
-Figures: `../claude-answers/img/04-ring-3layers.png`, `../claude-answers/img/04-dissolves.png`.
+(This was the subsection "Patterns in thick slabs" of the October and November reports; it was taken out of
+the November report on Nov 3 and lives here.)
+
+With the parameters of early October (μ_BB = 2), every slab of three or more layers ended as one compact
+central cluster, at any N0 up to 4800. What we tried at three layers and N0 = 2400 (the salt-and-pepper start
+is the one the July runs used: 75 % B, 15 % A and 10 % C, shuffled inside the core):
+
+| change | outcome | looseness S |
+|---|---|---|
+| B fraction 65 % instead of 60 % | central | 0.88 |
+| B cells scattered outside the core (10 to 30 % of them) | central | 0.86–0.89 |
+| C cells mixed into the core (10 to 30 % of it, as in July) | central | 0.89–0.91 |
+| spring plates (July) instead of rigid ones | central | 0.91 |
+| plate friction 5 instead of 1.5 | central | 0.89 |
+| July mechanics (F_rep BB = 3, F_rep CC = 5.1) | central | 0.90–0.93 |
+| F_att CC: 3 → 3.6 | central | 0.88 |
+| F_att BB: 6.4 → 5.6 | central, looser | 0.72 |
+| λ multiplied by 2, 3 or 4 | central (and no polarisation) | 0.52–0.84 |
+| μ_BB: 2 → 1.85 or 1.8 | B dissolves into C | 0.30–0.35 |
+| **μ_BB: 2 → 1.9** | **ring, then islands** | **0.45** |
+
+S (the mean share of B among a B cell's neighbours) is about 0.9 for a compact cluster and 0.4–0.6 for loose
+patterns. (These were read with the October classifier at fB 0.2; F_att BB 5.6 was tried at μ_BB = 2.)
+
+What changes the outcome is the cohesion of the B tissue. In a slab of one or two layers, the C cells that
+appear inside the B core cannot get out, since cells cannot pass each other, and they split the core. From
+three layers on, cells pass over and under each other, and a cohesive B core squeezes the new C cells out and
+stays as one cluster. The cohesion is the adhesion energy W = f_att·2r·A(μ), A(μ) = (1+μ)ln μ − 2(μ−1)
+(derivation in `../claude-answers/09-cleaning-up.md` §9). Shortening the B–B attraction range from μ_BB = 2
+to 1.9 lowers W_BB from 1.02 to 0.79, still above W_CC = 0.65. Then small cores stay compact, but a large core
+in a thick slab opens into a ring and breaks into islands. It is the energy and not the range: with
+μ_BB = 1.8 and F_att BB raised to keep W_BB = 1.02, the core stays compact. At μ_BB = 1.85 (W_BB ≈ W_CC), B is
+no longer more cohesive than C and simply dissolves into it, even in small aggregates.
+
+The new parameter set keeps the other behaviours: small squeezed aggregates keep a central cluster,
+monolayers give sparse islands, unconfined aggregates polarise, and BC fusion glues.
+
+Figures: `../code-claude/figures/fig6_ring_3layers.png` (the ring, 3 layers, N0 2400),
+`../code-claude/figures/fig7_dissolves_muBB1.8.png` (B dissolving at μ_BB 1.8, 2 layers, N0 300); the October
+versions `../claude-answers/img/04-ring-3layers.png`, `../claude-answers/img/04-dissolves.png`.
 
 ### A6. BC glue, not a sphere
 
@@ -56,11 +88,14 @@ Two aggregates glue without rounding into one sphere when |σ_B − σ_C| < γ_B
 two centres over (Rg1 + Rg2) is 0.54 (BB) and 0.56 (CC): fused into one sphere. For BC it is 0.91: two lobes
 glued together. The BC entries were never changed (f_att 1.6, f_rep 3, μ 2).
 
-### A7. When the outcome is read: 20 % B
+### A7. When the outcome is read: 12 % B (20 % until Nov 2)
 
-The outcome is read at the first frame with 20 % B cells, the model's equivalent of 96 h (T+ falls from 60 to
-20 % between 72 and 96 h in the experiments). It is also recorded at 30 % and 12 % to show how stable it is:
-rings break into islands later, and large aggregates polarise late.
+Since Nov 3 the outcome is read at the first frame with 12 % B cells, about 26 h after the start of
+differentiation: the experiments read at 96 h, 24 h after squeezing, with about 12 % T+. A moment counts only
+if at least half of the B cells are in clusters there; otherwise B is differentiating away (islands shrink
+below the 10-cell minimum, and the last one would read as a B-centroid), and the run takes its outcome
+at 15 %, else at 20 %. Until Nov 2 it was read at 20 % B. The extra time lets the rings of 3
+and 4 layers break (more clusters in thick slabs) and lets more aggregates polarise late.
 
 ### A8. The time unit: 4 minutes
 
@@ -87,9 +122,11 @@ The experiments cluster T+ cells with a DBSCAN-like rule: within 13 µm (= 2.6 r
 least 40 % T+ neighbours is a core cell; core cells within 13 µm are linked; other T+ cells join the cluster of
 their nearest core cell; clusters of at least 20 cells are kept; N_eff = 1/Σp_i². We classify a run as
 **polarised** if P ≥ 0.3, **pattern** if N_eff ≥ 1.5 (B split into clusters of comparable size), otherwise
-**central**. An unbroken ring is therefore central, as in the experiments' medium confinement. The one
-change: clusters of 10 cells instead of 20, because our aggregates are 10–100× smaller (with 20, monolayers of
-N0 ≤ 300 have no cluster at all).
+**central**. An unbroken ring is therefore central, as in the experiments' medium confinement. Two changes:
+clusters of 10 cells instead of 20, because our aggregates are 10–100× smaller (with 20, monolayers of
+N0 ≤ 300 have no cluster at all); and a core cell needs half of its neighbours T+ instead of 40 % (Nov 2):
+with 40 %, a ring whose pieces still touch through threads of one or two B cells is one cluster. When the
+outcome is read: A7. The full rule is in the November report, "Reading the outcome".
 
 ### A11. Cell diffusion and the Damköhler number
 

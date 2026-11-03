@@ -23,10 +23,28 @@ const EXP10_KEYS = ["class_exp10_02", "class_exp10_012"]
 # that hang together by thin B threads -- in between the October readout and the
 # experiments' (claude-answers/07)
 const CORE_FRAC = 0.5
-const EXP50_KEYS = ["class_exp50_02", "class_exp50_012"]
-const EXP_ST_KEYS = ["n_cl", "N_eff", "f_cl", "P", "n_cl10", "N_eff10", "n_cl50", "N_eff50"]
-const STRING_KEYS = Set(vcat(CLS_KEYS, EXP_KEYS, EXP10_KEYS, EXP50_KEYS))
-const READOUT_VERSION = "2026-11-02-exp50"
+const EXP50_KEYS = ["class_exp50_02", "class_exp50_015", "class_exp50_012", "class_exp50_010"]
+const EXP50_FBS = (0.2, 0.15, 0.12, 0.10)
+# the figures' readout since Nov 3: at fB = 0.12 (about 24 h after squeezing, as the experiments'
+# 96 h with ~12 % T+), with three outcomes only. It needs at least half of the B cells in clusters
+# (READ_MIN_CL); below that B is differentiating away -- the islands shrink below 10 cells and
+# one survivor would read as a B-centroid -- and the run takes its outcome at fB 0.15, else 0.2.
+# class_read_late: the same from fB 0.10 (the end of the run), to break ties between seeds.
+const READ_KEYS = ["class_read", "class_read_late"]
+const F50_KEYS = ["f_cl50_02", "f_cl50_015", "f_cl50_012", "f_cl50_010"]
+const READ_MIN_CL = 0.5
+const EXP_ST_KEYS = ["n_cl", "N_eff", "f_cl", "P", "n_cl10", "N_eff10", "n_cl50", "N_eff50", "f_cl50_02", "f_cl50_015", "f_cl50_012", "f_cl50_010"]
+const STRING_KEYS = Set(vcat(CLS_KEYS, EXP_KEYS, EXP10_KEYS, EXP50_KEYS, READ_KEYS))
+const READOUT_VERSION = "2026-11-03-read012b"
+
+"""
+The outcome read from `classes` (latest first) with `f_cl` the share of B in clusters at each:
+the first one with f_cl >= READ_MIN_CL (and a cluster at all), else the last (earliest) one.
+"""
+function read_outcome(classes, f_cl)
+	i = findfirst(j -> classes[j] != "NONE" && f_cl[j] >= READ_MIN_CL, eachindex(classes))
+	classes[something(i, lastindex(classes))]
+end
 
 jobkey(r) = join((r["kind"], r["cand"], r["core"], r["layers"], r["N0"], r["seed"]), ",")
 
@@ -78,10 +96,14 @@ function readout(file; confined = true)
 		k = frame_at(d, f)
 		out[key] = classify_exp(exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10))
 	end
-	for (key, f) in zip(EXP50_KEYS, (0.2, 0.12))
+	for (key, fkey, f) in zip(EXP50_KEYS, F50_KEYS, EXP50_FBS)
 		k = frame_at(d, f)
-		out[key] = classify_exp(exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10, frac = CORE_FRAC))
+		e = exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10, frac = CORE_FRAC)
+		out[key] = classify_exp(e); out[fkey] = e.f_cl
 	end
+	cl(fbs...) = [out["class_exp50_$(f)"] for f in fbs]; fc(fbs...) = [out["f_cl50_$(f)"] for f in fbs]
+	out["class_read"] = read_outcome(cl("012", "015", "02"), fc("012", "015", "02"))
+	out["class_read_late"] = read_outcome(cl("010", "012", "015", "02"), fc("010", "012", "015", "02"))
 	k = frame_at(d, 0.2)
 	st = pattern_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; confined = confined)
 	for key in ST_KEYS; out[key] = getfield(st, Symbol(key)); end
@@ -111,7 +133,7 @@ Overwrite the stored classes and stats of every confined / free run in `rows` wi
 readout() of its trajectory, using (and extending) each folder's readout_cache.csv.
 """
 function with_readout!(rows)
-	keys_ = vcat(CLS_KEYS, EXP_KEYS, EXP10_KEYS, EXP50_KEYS, ST_KEYS, EXP_ST_KEYS, ["t_02", "offset_run"])
+	keys_ = vcat(CLS_KEYS, EXP_KEYS, EXP10_KEYS, EXP50_KEYS, READ_KEYS, ST_KEYS, EXP_ST_KEYS, ["t_02", "offset_run"])
 	for dir in unique(r["dir"] for r in rows)
 		cfile = joinpath(dir, "readout_cache.csv")
 		cache = Dict{String,Dict{String,Any}}()
