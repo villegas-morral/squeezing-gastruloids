@@ -14,7 +14,19 @@
 const FBS = (0.4, 0.3, 0.2, 0.15, 0.12)
 const CLS_KEYS = ["class_04", "class_03", "class_02", "class_015", "class_012"]
 const ST_KEYS = ["n_isl", "f_isl", "f_iso", "f_max", "S", "spread", "fill", "offset", "offset_max"]
-const READOUT_VERSION = "2026-10-07-fill-single"
+# the experiment-like readout (classify_exp, November 2026) at the same fB, with the
+# experiments' minimum cluster of 20 cells and with 10 (in between: small aggregates)
+const EXP_KEYS = ["class_exp_04", "class_exp_03", "class_exp_02", "class_exp_015", "class_exp_012"]
+const EXP10_KEYS = ["class_exp10_02", "class_exp10_012"]
+# the readout of the figures since Nov 2 (second round): clusters of >= 10 cells and a
+# core cell needs at least half B neighbours (the experiments: 40 %), which splits rings
+# that hang together by thin B threads -- in between the October readout and the
+# experiments' (claude-answers/07)
+const CORE_FRAC = 0.5
+const EXP50_KEYS = ["class_exp50_02", "class_exp50_012"]
+const EXP_ST_KEYS = ["n_cl", "N_eff", "f_cl", "P", "n_cl10", "N_eff10", "n_cl50", "N_eff50"]
+const STRING_KEYS = Set(vcat(CLS_KEYS, EXP_KEYS, EXP10_KEYS, EXP50_KEYS))
+const READOUT_VERSION = "2026-11-02-exp50"
 
 jobkey(r) = join((r["kind"], r["cand"], r["core"], r["layers"], r["N0"], r["seed"]), ",")
 
@@ -57,13 +69,27 @@ end
 function readout(file; confined = true)
 	d = load_frames(file)
 	out = Dict{String,Any}()
-	for (key, f) in zip(CLS_KEYS, FBS)
+	for (key, xkey, f) in zip(CLS_KEYS, EXP_KEYS, FBS)
 		k = frame_at(d, f)
 		out[key] = classify_pattern(pattern_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; confined = confined))
+		out[xkey] = classify_exp(exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]))
+	end
+	for (key, f) in zip(EXP10_KEYS, (0.2, 0.12))
+		k = frame_at(d, f)
+		out[key] = classify_exp(exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10))
+	end
+	for (key, f) in zip(EXP50_KEYS, (0.2, 0.12))
+		k = frame_at(d, f)
+		out[key] = classify_exp(exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10, frac = CORE_FRAC))
 	end
 	k = frame_at(d, 0.2)
 	st = pattern_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; confined = confined)
 	for key in ST_KEYS; out[key] = getfield(st, Symbol(key)); end
+	e20 = exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]); e10 = exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10)
+	out["n_cl"] = e20.n_cl; out["N_eff"] = e20.N_eff; out["f_cl"] = e20.f_cl; out["P"] = e20.P
+	out["n_cl10"] = e10.n_cl; out["N_eff10"] = e10.N_eff
+	e50 = exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10, frac = CORE_FRAC)
+	out["n_cl50"] = e50.n_cl; out["N_eff50"] = e50.N_eff
 	out["t_02"] = d.t[k]
 	m1 = frame_at(d, 0.6)
 	off = 0.0
@@ -85,7 +111,7 @@ Overwrite the stored classes and stats of every confined / free run in `rows` wi
 readout() of its trajectory, using (and extending) each folder's readout_cache.csv.
 """
 function with_readout!(rows)
-	keys_ = vcat(CLS_KEYS, ST_KEYS, ["t_02", "offset_run"])
+	keys_ = vcat(CLS_KEYS, EXP_KEYS, EXP10_KEYS, EXP50_KEYS, ST_KEYS, EXP_ST_KEYS, ["t_02", "offset_run"])
 	for dir in unique(r["dir"] for r in rows)
 		cfile = joinpath(dir, "readout_cache.csv")
 		cache = Dict{String,Dict{String,Any}}()
@@ -95,7 +121,7 @@ function with_readout!(rows)
 				hdr = split(lines_[2], ',')
 				for l in lines_[3:end]
 					p = split(l, ',')
-					cache[p[1]] = Dict{String,Any}(hdr[i] => (i - 1 <= length(CLS_KEYS) ? String(p[i]) : parse(Float64, p[i]))
+					cache[p[1]] = Dict{String,Any}(hdr[i] => (hdr[i] in STRING_KEYS ? String(p[i]) : parse(Float64, p[i]))
 												   for i in 2:length(hdr))
 				end
 			end
@@ -103,9 +129,11 @@ function with_readout!(rows)
 		todo = [r for r in rows if r["dir"] == dir && r["kind"] in ("confined", "free") && r["ok"] == true &&
 							   !haskey(cache, r["file"])]
 		isempty(todo) || println("reading $(length(todo)) new trajectories in $(basename(dir)) ...")
-		for r in todo
-			cache[r["file"]] = readout(joinpath(dir, r["file"]); confined = r["kind"] == "confined")
+		res = Vector{Any}(undef, length(todo))      # in parallel when julia runs with threads (-t)
+		Threads.@threads for i in eachindex(todo)
+			res[i] = readout(joinpath(dir, todo[i]["file"]); confined = todo[i]["kind"] == "confined")
 		end
+		for (r, o) in zip(todo, res); cache[r["file"]] = o; end
 		open(cfile, "w") do io
 			println(io, "# $(READOUT_VERSION)")
 			println(io, join(vcat("file", keys_), ","))

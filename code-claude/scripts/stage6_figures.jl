@@ -14,7 +14,9 @@
 # Nothing here simulates. The runs come from results/stage5/<phase>/ (confined) and
 # results/stage5/tune/ (unconfined runs, fusion assay, the sharp/diluted comparison).
 
-using Statistics, Printf, DelimitedFiles, JLD2, CairoMakie, LinearAlgebra
+using Statistics, Printf, DelimitedFiles, JLD2, LinearAlgebra
+using GLMakie                            # the translucent C cells of unconfined aggregates (GHOST); PNG output only
+GLMakie.activate!(visible = false, scalefactor = 0.3, px_per_unit = 1)   # small hidden window: GLMakie caps the window at the screen size
 include(joinpath(@__DIR__, "gastruloids_analysis.jl"))
 include(joinpath(@__DIR__, "stage5_common.jl"))      # read_rows, with_readout!, frame_at
 
@@ -26,7 +28,20 @@ const S5    = joinpath(@__DIR__, "..", "results", "stage5")
 const FIG   = joinpath(@__DIR__, "..", "figures")
 const DATA  = joinpath(FIG, "data")
 const HOURS = 15.0                       # time units per hour
+# the 25 time units of relaxation after seeding have no division and no differentiation:
+# times in the figures count from the start of differentiation (November 2026)
+const T_RELAX = 25.0
+hrs(d, k) = max(0.0, d.t[k] - T_RELAX) / HOURS
 const BASE  = String(split(CAND, "@")[1]) # "x@lw3" -> "x": unconfined runs and the fusion assay have no plates
+# the readout drawn in the figures (November 2026): the experiments' clustering and
+# polarisation (classify_exp) with a minimum cluster of 10 cells instead of their 20,
+# since our aggregates are 10-100 times smaller (with 20, monolayers of N0 <= 300 have
+# no cluster at all), and a core cell needs half its neighbours B instead of their
+# 40 % (CORE_FRAC, stage5_common.jl: rings held together by thin B threads count as
+# clusters). The October classifier (class_02), the experiments' 40 % (class_exp10_02)
+# and their strict version (class_exp_02) are drawn too, for comparison.
+const CCOL  = "class_exp50_02"
+const CCOL_LATE = "class_exp50_012"
 
 fB_of(d, k) = count(==(2), d.cell_state[k]) / length(d.cell_state[k])
 cells(d, k) = (x = d.x[k], y = d.y[k], z = d.z[k], r = d.r[k], cell_state = d.cell_state[k])
@@ -62,7 +77,7 @@ trow  = with_readout!(filter(r -> r["ok"] == true, read_rows(joinpath(S5, "tune"
 append!(trow, filter(r -> r["kind"] == "free", prow))
 phase = with_diameter!(filter(r -> r["kind"] == "confined" && String(r["cand"]) == CAND && String(r["core"]) == CORE, prow))
 println("$(length(phase)) phase-space runs of $CAND ($CORE)")
-pcls(r) = phase_class(String(r["class_02"]))
+pcls(r) = phase_class(String(r[CCOL]))
 major(L, N0) = (o = [pcls(r) for r in phase if r["layers"] == L && r["N0"] == N0];
 				isempty(o) ? "" : argmax(c -> count(==(c), o), unique(o)))
 
@@ -83,7 +98,7 @@ end
 load(r) = load_frames(joinpath(r["dir"], String(r["file"])))
 lname(L) = @sprintf("%g layer%s", L, L == 1 ? "" : "s")
 meta(r, d, k) = (run = String(r["file"]), cand = String(r["cand"]), core = String(r["core"]), layers = Float64(r["layers"]),
-				 N0 = Int(r["N0"]), seed = Int(r["seed"]), frame = k, t = d.t[k], hours = d.t[k] / HOURS, fB = fB_of(d, k))
+				 N0 = Int(r["N0"]), seed = Int(r["seed"]), frame = k, t = d.t[k], hours = hrs(d, k), fB = fB_of(d, k))
 
 EX = Dict(
 	"CENTRAL"   => example("CENTRAL",   [(4, 600), (3, 600), (2, 150), (2, 300), (3, 300), (4, 300)]),
@@ -94,40 +109,36 @@ EX = Dict(
 let r = example("PATTERN", [(3, 2400), (4, 2400), (3, 4800), (4, 4800), (6, 2400), (3, 1200)])
 	r !== nothing && r["layers"] >= 3 && (EX["PATTERN_THICK"] = r)
 end
+# the phase-space insets (November): a clearly central core, and clusters between a broken
+# ring and fine islands
+EX["CENTRAL_INSET"] = example("CENTRAL", [(3, 1200), (4, 1200), (3, 600), (4, 600)])
+let r = example("PATTERN", [(2, 1200), (2, 2400), (1, 600)])
+	r === nothing || (EX["PATTERN_INSET"] = r)
+end
 for (c, r) in EX
 	println(@sprintf("%-10s example: ", c), r === nothing ? "none" : @sprintf("%s, N0 %d, seed %d (%s)",
-			lname(r["layers"]), r["N0"], r["seed"], r["class_02"]))
+			lname(r["layers"]), r["N0"], r["seed"], r[CCOL]))
 end
 
 "Pick the runs and write figures/data (every figure's panels, the phase space, the movie trajectories)."
 function write_data()
 	rm(DATA; force = true, recursive = true); mkpath(DATA)
 
-	# ---- fig1: the initial condition, sharp and diluted -----------------------------
+	# ---- fig1: the initial condition (November: the core that is used, one N0, one scale, no titles)
+	# 2 layers and unconfined, both N0 600 (as in fig2 and the overview), drawn at the same scale
 	pans = NamedTuple[]
-	col = 0
-	core_label(c) = c == "sharp" ? "sharp" : startswith(c, "fin") ? "diluted ($(round(Int, 100parse(Float64, c[4:end]))) % inside)" :
-					 startswith(c, "cc") ? "C mixed in ($(round(Int, 100parse(Float64, c[3:end]))) % of the core)" : c
-	for core in unique((CORE, "sharp", "fin0.75")), (kind, L, N0) in (("confined", 2, 2400), ("free", 0, 600), ("free", 0, 500))
-		kind == "free" && N0 == 500 && any(p -> p.panel == "ic_$(core)_free", pans) && continue
-		# the run of the chosen set (phase space, then tuning); for the diluted core,
-		# which was only run in tuning, the run of the friction-free base set, or of the
-		# Oct 7 set (the seeding does not depend on the B-B range; meta says which run)
+	for (col, (kind, L, N0)) in enumerate((("confined", 2, 600), ("free", 0, 600)))
 		r = nothing
-		for (rows, cand) in ((prow, kind == "free" ? BASE : CAND), (trow, kind == "free" ? BASE : CAND), (trow, BASE),
-							 (trow, "july_frB4.5_frC6"))
-			i = pick(rows, kind, L, N0; seed = 1, core = core, cand = cand)
+		for rows in (prow, trow)
+			i = pick(rows, kind, L, N0; seed = 1)
 			i === nothing || (r = rows[i]; break)
 		end
 		r === nothing && continue
-		d = load(r); k = frame_at(d, 0.6); col += 1
-		push!(pans, (panel = "ic_$(core)_$(kind)", row = 1, col = col, views = kind == "free" ? "top+front" : "top+side",
-					 label = @sprintf("%s core|%s, %d cells|B = %.0f %%", core_label(core),
-									  kind == "free" ? "unconfined" : lname(L), length(d.x[k]), 100fB_of(d, k)),
-					 cells = cells(d, k), meta = meta(r, d, k)))
+		d = load(r); k = frame_at(d, 0.6)
+		push!(pans, (panel = "ic_$(CORE)_$(kind)", row = 1, col = col, views = kind == "free" ? "top+front" : "top+side",
+					 label = "", cells = cells(d, k), meta = meta(r, d, k)))
 	end
-	write_panels(joinpath(DATA, "fig1_initial_condition"),
-				 "Initial condition: B (green) = 60 % of the cells, C (orange) outside", pans)
+	write_panels(joinpath(DATA, "fig1_initial_condition"), "", pans; same_scale = true)
 
 	# ---- fig2: one aggregate size under no / medium / strong confinement, through time ---------
 	# (your presentation sketch, panel B): N0 600, unconfined (polarises), 4 layers (central
@@ -146,13 +157,13 @@ function write_data()
 			c = confined ? cells(d, k) : align_B(cells(d, k); confined = false, ref = cells(d, kend))
 			where_ = confined ? "$(lname(r["layers"])), N0 $(r["N0"])" : "unconfined, N0 $(r["N0"])"
 			lbl = (j == 1 ? "$name: $where_|" : "|") *
-				  @sprintf("t = %.0f h, fB = %.2f%s", d.t[k] / HOURS, fB_of(d, k), f == 0.2 ? "  (readout)" : "")
+				  @sprintf("t = %.0f h, fB = %.2f%s", hrs(d, k), fB_of(d, k), f == 0.2 ? "  (readout)" : "")
 			push!(pans, (panel = "row$(row)_$(j)", row = row, col = j, views = confined ? "top+side" : "top+front",
 						 label = lbl, cells = c, meta = meta(r, d, k)))
 		end
 	end
 	write_panels(joinpath(DATA, "fig2_behaviours"),
-				 "No, medium and strong confinement (top: mid-plane cutaway; below: side)", pans)
+				 "No, medium and strong confinement (top and side views)", pans)
 
 	# ---- fig3: the patterns at the readout --------------------------------------------
 	# every thickness that has patterns: its largest N0 first, then its smallest, up to 8
@@ -165,13 +176,14 @@ function write_data()
 	for (i, r) in enumerate(pats[1:min(end, 8)])
 		d = load(r); k = frame_at(d, 0.2)
 		st = pattern_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k])
+		ex = exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10, frac = CORE_FRAC)
 		push!(pans, (panel = @sprintf("L%g_N%d", r["layers"], r["N0"]), row = 1 + (i - 1) ÷ 4, col = 1 + (i - 1) % 4,
-					 views = "top", label = @sprintf("%s, N0 %d|%s: %d islands, S = %.2f", lname(r["layers"]), r["N0"],
-											lowercase(String(r["class_02"])), st.n_isl, st.S),
+					 views = "top", label = @sprintf("%s, N0 %d|%d clusters, N_eff = %.1f, S = %.2f", lname(r["layers"]), r["N0"],
+											ex.n_cl, ex.N_eff, st.S),
 					 cells = cells(d, k), meta = meta(r, d, k)))
 	end
 	write_panels(joinpath(DATA, "fig3_patterns"),
-				 "B patterns at the readout fB = 0.2 (seed 1, mid-plane cutaway)", pans)
+				 "B patterns at the readout fB = 0.2 (seed 1, top view, cut at the mid-plane)", pans)
 
 	# ---- fig4: unconfined aggregates of every size, at the readout ---------------------------
 	# (the "free" row of the phase space): B polarises up to N0 ~ 600, bigger ones are
@@ -181,13 +193,13 @@ function write_data()
 		i = pick(trow, "free", 0, N0; seed = 1)
 		i === nothing && continue
 		r = trow[i]; d = load(r); k = frame_at(d, 0.2)
-		st = pattern_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; confined = false)
+		ex = exp_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; nmin = 10, frac = CORE_FRAC)
 		push!(pans, (panel = "free_N$(N0)", row = 1, col = j, views = "top+front",
-					 label = @sprintf("N0 %d, fB = %.2f|%s, B offset %.2f", N0, fB_of(d, k), lowercase(classify_pattern(st)), st.offset),
+					 label = @sprintf("N0 %d, fB = %.2f|%s, P = %.2f", N0, fB_of(d, k), lowercase(classify_exp(ex)), ex.P),
 					 cells = align_B(cells(d, k); confined = false), meta = meta(r, d, k)))
 	end
 	write_panels(joinpath(DATA, "fig4_unconfined"),
-				 "Unconfined aggregates at the readout fB = 0.2 (top: mid-plane cut; below: whole)", pans)
+				 "Unconfined aggregates at the readout fB = 0.2 (C translucent; top and front views)", pans)
 
 	# ---- fig5: the fusion assay -------------------------------------------------------
 	ff = joinpath(S5, "tune", "fusion_$(BASE).jld2")
@@ -197,26 +209,50 @@ function write_data()
 			m = fh["metric"]
 			for (j, pr) in enumerate(("BB", "CC", "BC"))
 				c = fh[pr]
-				push!(pans, (panel = "doublet_$(pr)", row = 1, col = j, views = "top+front",
-							 label = @sprintf("%s doublet, 24 h|separation / (Rg1 + Rg2) = %.2f", pr, m[pr][3]),
+				# November: only the side view, titled "BB fusion" etc., no figure title
+				push!(pans, (panel = "doublet_$(pr)", row = 1, col = j, views = "front",
+							 label = "$pr fusion",
 							 cells = c, meta = (assay = "fusion_assay(n = 150, hours = 24)", pair = pr,
 												t0 = m[pr][1], h12 = m[pr][2], h24 = m[pr][3], cand = CAND)))
 			end
 		end
-		write_panels(joinpath(DATA, "fig5_fusion"),
-					 "Fusion: two 150-cell aggregates after 24 h (1.6 touching, 0.5 one sphere)", pans)
+		write_panels(joinpath(DATA, "fig5_fusion"), "", pans)
+	end
+
+	# ---- fig6, fig7: a thick-slab ring through time, and B dissolving at mu BB 1.8 ------------
+	# (Oct 8 runs; in the November report as ring-3layers.png and dissolves-muBB1.8.png)
+	for (fname, file) in (("fig6_ring_3layers", joinpath(S5, PHASE, "com_L3_N2400_$(CAND)_rigid_w0_lw1.5_s1.jld2")),
+						  ("fig7_dissolves_muBB1.8", joinpath(S5, "thick", "com_L2_N300_july_frB4.5_frC6_muB1.8@lw1.5_rigid_w0_lw1.5_s1.jld2")))
+		isfile(file) || (println("missing ", file); continue)
+		d = load_frames(file); pans = NamedTuple[]
+		for (j, f) in enumerate((0.6, 0.4, 0.3, 0.2, 0.12))
+			k = frame_at(d, f); c = cells(d, k)
+			ex = exp_stats(c.x, c.y, c.z, c.cell_state; nmin = 10, frac = CORE_FRAC)
+			push!(pans, (panel = "f$(j)", row = 1, col = j, views = "top+side",
+						 label = @sprintf("fB %.2f, t %.0f h|%s, N_eff %.1f", fB_of(d, k), hrs(d, k), lowercase(classify_exp(ex)), ex.N_eff),
+						 cells = c, meta = (run = basename(file), frame = k, t = d.t[k], hours = hrs(d, k), fB = fB_of(d, k))))
+		end
+		write_panels(joinpath(DATA, fname), "", pans)
 	end
 
 	# ---- phase space: at the readout fB = 0.2, and the same runs later (fB = 0.12) ------------
 	ns = [count(r -> (r["layers"], r["N0"]) == p, phase) for p in unique((r["layers"], r["N0"]) for r in phase)]
 	nseed_txt = minimum(ns) == maximum(ns) ? "$(minimum(ns)) seeds" : "$(minimum(ns))–$(maximum(ns)) seeds per point"
-	for (folder, ccol, fread, ttl) in (("phase_space", "class_02", 0.2, "Phase space: outcome at the readout fB = 0.2 ($nseed_txt)"),
-									   ("phase_space_late", "class_012", 0.12, "The same runs later, at fB = 0.12"))
+	# no titles on the charts (November): the readout is in readout.txt and the reports' captions
+	for (folder, ccol, fread, ttl) in (("phase_space", CCOL, 0.2, ""),
+									   ("phase_space_late", CCOL_LATE, 0.12, ""),
+									   ("phase_space_classic", "class_02", 0.2, ""),
+									   ("phase_space_exp20", "class_exp_02", 0.2, ""),
+									   ("phase_space_core40", "class_exp10_02", 0.2, ""))
 		dir = joinpath(DATA, folder); mkpath(dir)
 		write(joinpath(dir, "readout.txt"), ccol)
 		write(joinpath(dir, "title.txt"), ttl)
-		keys_ = ["layers", "N0", "seed", "D", "class_04", "class_03", "class_02", "class_015", "class_012", "t_02",
-				 "n_isl", "f_isl", "f_iso", "f_max", "S", "spread", "fill", "offset", "offset_max", "layers_eff", "N_end", "file"]
+		# A_um2: the pancake area at squeezing, pi (D r)^2 with r = 5 um (D in cell diameters)
+		for r in phase; r["A_um2"] = round(pi * r["D"]^2 * 25; digits = 1); end
+		keys_ = ["layers", "N0", "seed", "D", "A_um2", "class_04", "class_03", "class_02", "class_015", "class_012",
+				 "class_exp_04", "class_exp_03", "class_exp_02", "class_exp_015", "class_exp_012", "class_exp10_02", "class_exp10_012",
+				 "class_exp50_02", "class_exp50_012", "t_02", "n_isl", "f_isl", "f_iso", "f_max", "S", "spread", "fill", "offset", "offset_max",
+				 "n_cl", "N_eff", "f_cl", "P", "n_cl10", "N_eff10", "n_cl50", "N_eff50", "layers_eff", "N_end", "file"]
 		open(joinpath(dir, "phase_space.csv"), "w") do io
 			println(io, join(keys_, ","))
 			for r in sort(phase; by = r -> (r["layers"], r["N0"], r["seed"]))
@@ -224,25 +260,27 @@ function write_data()
 			end
 		end
 		# the unconfined runs of the same mechanics (no plates): the "free" row of the chart
+		fkeys = ["class_02", "class_012", "class_exp_02", "class_exp_012", "class_exp10_02", "class_exp10_012",
+				  "class_exp50_02", "class_exp50_012"]
 		open(joinpath(dir, "free.csv"), "w") do io
-			println(io, "N0,seed,class_02,class_012,offset,file")
+			println(io, "N0,seed,", join(fkeys, ","), ",offset,P,file")
 			grid_N0 = Set(r["N0"] for r in phase)      # only the N0 values of the grid
 			for r in sort(filter(r -> r["kind"] == "free" && String(r["cand"]) == BASE && String(r["core"]) == CORE &&
 								 r["N0"] in grid_N0, trow);
 						  by = r -> (r["N0"], r["seed"]))
-				println(io, join((r["N0"], r["seed"], r["class_02"], r["class_012"], @sprintf("%.4f", r["offset"]), r["file"]), ","))
+				println(io, join(vcat(r["N0"], r["seed"], [r[k] for k in fkeys], @sprintf("%.4f", r["offset"]), @sprintf("%.4f", r["P"]), r["file"]), ","))
 			end
 		end
-		# insets: the examples of fig2 at this readout
+		# insets: one example per outcome at this readout, titled with the outcome's name
+		# (the panel column is the class, which colours the title)
 		open(joinpath(dir, "panels.tsv"), "w") do io
 			println(io, "panel\tlayers\tN0\tviews\tlabel\tfile")
-			for (cls, name) in (("CENTRAL", "central cluster"), ("PATTERN", "pattern"), ("PATTERN_THICK", "pattern"), ("POLARISED", "polarised"))
-				r = get(EX, cls, nothing); r === nothing && continue
+			for (key, cls) in (("POLARISED", "POLARISED"), ("CENTRAL_INSET", "CENTRAL"), ("PATTERN_INSET", "PATTERN"))
+				r = get(EX, key, nothing); r === nothing && continue
 				d = load(r); k = frame_at(d, fread)
-				c = cls == "POLARISED" ? align_B(cells(d, k)) : cells(d, k)
+				c = cls == "POLARISED" ? align_B(cells(d, k); confined = false) : cells(d, k)
 				f = save_panel(dir, "inset_$(lowercase(cls))", c.x, c.y, c.z, c.r, c.cell_state; meta(r, d, k)...)
-				println(io, join((lowercase(cls), r["layers"], r["N0"], "top+side",
-								  "$name|$(lname(r["layers"])), N0 $(r["N0"]), fB $(fread)", f), '\t'))
+				println(io, join((lowercase(cls), r["layers"], r["N0"], "top+side", PHASE_NAMES[cls], f), '\t'))
 			end
 		end
 	end
@@ -272,7 +310,10 @@ function make_movies()
 		endswith(f, ".jld2") || continue
 		d = load_frames(joinpath(mdir, f))
 		ks = frame_at(d, 0.6):frame_at(d, 0.1)
-		record_pancake_frames(d, color_map, ks; fps = 6, filename = joinpath(odir, replace(f, ".jld2" => ".mp4")))
+		# unconfined runs whole with C translucent, confined ones with the mid-plane cutaway
+		gh = f in ("unconfined.jld2", "polarised.jld2") ? GHOST : nothing
+		record_pancake_frames(d, color_map, ks; fps = 6, t0 = T_RELAX, ghost = gh,
+							  filename = joinpath(odir, replace(f, ".jld2" => ".mp4")))
 		println("wrote movies/", replace(f, ".jld2" => ".mp4"))
 	end
 end

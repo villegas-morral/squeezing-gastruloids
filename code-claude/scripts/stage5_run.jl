@@ -10,6 +10,8 @@
 #           the plates (run_confined lambda_wall; unconfined runs have no plates)
 #           "@hookean" uses the July spring plates instead of the rigid ones
 #           "@lamX" multiplies the friction lambda by X (Oct 8 test; lambda is meant to stay)
+#           "@tdivX" mean division time X (time units) for every cell type (Nov test:
+#           @tdiv195 = 13 h for B and C, instead of 300 and 750)
 #   core    sharp | fin0.75 (75 % of the B cells inside the core, initialize_diff! f_in)
 #           | fB0.65 (65 % B at seeding instead of 60 %)
 #           | cc0.1 (10 % of the core left C, mixed in: the July seeding)
@@ -97,7 +99,9 @@ for j in mine
 	wall = occursin("@hookean", cand) ? :hookean : :rigid  # "x@hookean": the July spring plates
 	m = match(r"@lam([0-9.]+)", cand)                      # "x@lam2": friction lambda x 2
 	lam = m === nothing ? 1.0 : parse(Float64, m[1])
-	base, _, lw = parse_cand(replace(cand, "@hookean" => "", r"@lam[0-9.]+" => ""))   # "fusion@lw3" -> ("fusion", 0, 3)
+	m = match(r"@tdiv([0-9.]+)", cand)                     # "x@tdiv195": every cell divides every 195 (13 h)
+	tdiv = m === nothing ? nothing : fill(parse(Float64, m[1]), 3)
+	base, _, lw = parse_cand(replace(cand, "@hookean" => "", r"@lam[0-9.]+" => "", r"@tdiv[0-9.]+" => ""))   # "fusion@lw3" -> ("fusion", 0, 3)
 	haskey(PSETS, cand) || (PSETS[cand] = CANDIDATES[base]())
 	P = PSETS[cand]
 	@printf("### %-8s %-18s %-8s L %-3g N0 %5d seed %d ... ", kind, cand, core, L, N0, seed); flush(stdout)
@@ -118,10 +122,10 @@ for j in mine
 		confined = kind == "confined"
 		f_in, fB0, cc = core_of(core)
 		r = confined ?
-			run_confined(L, N0; pset = cand, wall = wall, f_in = f_in, fB = fB0, c_core = cc, lambda_scale = lam, lambda_wall = lw, tf = 900.0,
-						 fB_stop = 0.10, seed = seed, outdir = OUT, verbose = false) :
-			run_unconfined(N0; pset = cand, f_in = f_in, fB = fB0, c_core = cc, lambda_scale = lam, tf = 900.0, fB_stop = 0.10,
-						   seed = seed, outdir = OUT, verbose = false)
+			run_confined(L, N0; pset = cand, wall = wall, f_in = f_in, fB = fB0, c_core = cc, lambda_scale = lam, lambda_wall = lw,
+						 tau_div = tdiv, tf = 900.0, fB_stop = 0.10, seed = seed, outdir = OUT, verbose = false) :
+			run_unconfined(N0; pset = cand, f_in = f_in, fB = fB0, c_core = cc, lambda_scale = lam, tau_div = tdiv, tf = 900.0,
+						   fB_stop = 0.10, seed = seed, outdir = OUT, verbose = false)
 		d = load_frames(r.file)
 		st_at(k) = pattern_stats(d.x[k], d.y[k], d.z[k], d.cell_state[k]; confined = confined)
 		cls = [classify_pattern(st_at(frame_at(d, r.m1, f))) for f in FBS]

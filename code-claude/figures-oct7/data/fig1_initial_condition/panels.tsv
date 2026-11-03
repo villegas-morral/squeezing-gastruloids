@@ -1,4 +1,0 @@
-panel	row	col	views	label	file
-ic_sharp_confined	1	1	top+side	sharp core|2 layers, 2400 cells|B = 60 %	ic_sharp_confined.csv
-ic_sharp_free	1	2	top+front	sharp core|unconfined, 600 cells|B = 60 %	ic_sharp_free.csv
-ic_fin0.75_confined	1	3	top+side	diluted (75 % inside) core|2 layers, 2400 cells|B = 60 %	ic_fin0.75_confined.csv

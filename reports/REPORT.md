@@ -75,6 +75,14 @@ These come from the July chat and the October 6 answers. Quotes are your words.
 | 10-08 | **The phase space is drawn four ways** (`replot_figures`): x = log₁₀ N0 or N0; y = plate gap (layers) or pancake diameter at squeezing (measured on each run, column `D`). | Your request (task 3). |
 | 10-08 | **LaTeX report** `reports/october-2026/main.tex`, written like the July one. Its parameter table has the July report's values next to the current ones, with the changes in red. | Your request. |
 | 10-08 | **Presentation figure** `figures/presentation.pdf` (`scripts/stage7_presentation.jl`), laid out like your sketch, in its colours, to finish in Inkscape. | Your request (task 4). |
+| 11-02 | **Readout as in the experiments** (`classify_exp`): their DBSCAN-like T+ clustering (13 µm = 2.6 r, core if ≥ 40 % T+ neighbours, clusters ≥ 20 cells, N_eff = 1/Σp²) and their polarisation P = shift / half the PC1 length, cutoff 0.3. Pattern = N_eff ≥ 1.5; an unbroken ring is central. The figures use it with clusters of ≥ 10 cells (`class_exp10_02`); the October readout (`class_02`) and the strict 20-cell one (`class_exp_02`) are kept and drawn too. Cache version `2026-11-02-exp`. | Your request ("ideally experiment-like … or something in between"). With 20 cells, monolayers of N0 ≤ 300 have no cluster at all: our aggregates are 10–100× smaller than gastruloids. |
+| 11-02 | **3D views: the whole aggregate, every C cell at alpha 0.6, rendered with GLMakie** (`GHOST`, `cells_mesh!`); the phase-space charts show the background only (no pies, lines or letters; ties go to the later readout), with the outcomes named Polarisation, B-centroid, Clusters and LaTeX labels; times count from the start of differentiation. | Your comments on answer 05 (`claude-answers/06-november-replies.md`). CairoMakie cannot do this transparency: the triangle edges of its spheres add up. |
+| 11-02 | **Phase space: log scale said on the axis; linear versions; pancake-area contours** (`A_um2` in `phase_space.csv`). | Your questions; task 2. |
+| 11-02 | **Cell ids saved** (`save_frames`), renumbered at seeding; `run_confined`/`run_unconfined` take `tau_div`; `stage5_run.jl` takes `@tdivX`. | Task 3 (MSD) and the 13 h test. |
+| 11-02 | **Readout core fraction 50 %** (`CORE_FRAC`, `class_exp50_02`, cache version `2026-11-02-exp50`): a core cell needs half its neighbours T+ instead of the experiments' 40 %. 3 layers N0 2400 and 4800 and 2 layers N0 600 become Clusters; nothing else changes. | Your comment on answer 06 ("a little more in between"): rings whose pieces touch through threads of one or two B cells were one cluster. `claude-answers/07-november-replies.md` §2. |
+| 11-02 | **Transparency only for unconfined aggregates**, C at alpha 0.2 in one meshscatter with B drawn first and no `transparency = true` (your plot_pancake); confined aggregates back to the opaque mid-plane cut. Phase space in the sketch colours at opacity 0.5, bigger text, thicker area lines; the overview's panel C with area lines and each example on its region. | Your comments on answer 06: the order-independent blending made the C cells dark brown. |
+| 11-02 | **Full phase space of `f_att` BB 5.8** started (`phase_E`, 178 runs). | The thick-slab screen (`thick_nov`): with the 50 % readout it is the only change that patterns at 4 layers (N0 2400, both seeds) and keeps 2 layers N0 150 central, polarisation and BC gluing. |
+| 11-02 | **The time unit is T0 = 4 min** (Oriola et al. 2026: T0 = R0/V0, V0 ≈ 1.25 µm/min), so 15 units = 1 h, as used since July. | The paper; your correction of the table. |
 
 ## The July work, piece by piece
 
@@ -525,6 +533,44 @@ Seeds: 2 per point, 3 at the points next to a threshold, 1 at N0 4800; 178 runs 
   - The smallest monolayer patterns (N0 212–300) shrink back into a central cluster as B runs out, so the
     1-layer threshold moves to ≈ 400.
   - The patterns at 2–4 layers stay, and the 2-layer rings turn into islands.
+
+### Stage 8: the November round (2026-11-02)
+
+Details and figures: `claude-answers/05-november-round.md`.
+
+- **Readout like the experiments** (decisions log, 11-02). Re-scoring the 178 runs changes the class of 34 at
+  fB 0.2. Polarisation hardly moves. Rings become central, so at the readout patterns need:
+  - 1 layer: N0 ≈ 165, as before
+  - 2 layers: ≈ 850 (October readout: 250)
+  - 3 layers: 2400 in 1 of 2 seeds (October: 1300)
+  - 4 layers: none up to 4800
+
+  By fB 0.12 the rings break: 2 layers from 600, 3 layers from ≈ 1600.
+- **Pancake area.** With this readout the pattern threshold sits at an area at squeezing of about
+  1–2 × 10⁴ µm² (11–16 cell diameters) for 1–3 layers. Thicker slabs need more: 4 layers stays central at
+  2.2 × 10⁴.
+- **Cell diffusion** (`scripts/msd_monolayer.jl`, `results/msd/`). Monolayers, N0 600 and 2400, 2 seeds,
+  one frame per 4 min; cells followed by id between divisions, growth flow removed.
+  - D ≈ 0.004 r² per unit ≈ 1.5 µm²/h, for B and C alike. Without the affine fit, relative to the
+    neighbours, it is 0.0025–0.0034.
+  - The MSD is nearly linear; its slope is 1.2–1.3 at 2–8 h.
+  - Da = q ℓ²/D ≈ 4–8 for ℓ = one cell diameter, and 500–3800 for ℓ = the pancake radius at squeezing.
+  - Model cells move ≈ 0.05 µm/min over one frame, ~25× less than the V0 that sets T0.
+- **Transparency in CairoMakie.** Three versions were tried:
+  - **All C translucent, depth-sorted.** A B core under five or more C cells disappears even at opacity
+    0.03: every sphere is many triangles, and their edges add up.
+  - **C translucent with B drawn on top.** B always shows, but B at all heights fills the hollow of a ring,
+    so 3-layer rings vanish.
+  - **Kept: the cut face opaque, the cells above it at opacity 0.03** (8-facet spheres, no shading). Rings
+    show at 3 layers, and the central core shows at 4 and at 12 layers. Flat translucent discs would be
+    cleaner, but CairoMakie scales data-space markers wrongly in 3D.
+- **13 h division for B and C** (`results/stage5/tdiv`, `scripts/tdiv_report.jl`; 30 points, seed 1).
+  - The class is the same as with 20 h / 50 h in 26 of 30 points at fB 0.2, and in 26 of 30 at fB 0.12.
+  - At fB 0.2: the monolayer patterns from N0 150; 3 layers N0 2400 has not broken yet; 8 layers N0
+    600–1200 polarise only after the readout.
+  - At fB 0.12: the late polarisation at 3–4 layers, N0 300–600, does not happen.
+  - fB 0.2 comes about 3 h earlier (16–19 h after seeding), and the aggregates grow ×4–5 instead of ×2.3.
+  - So equal and faster division hardly moves the phase space.
 
 ## Caveats
 

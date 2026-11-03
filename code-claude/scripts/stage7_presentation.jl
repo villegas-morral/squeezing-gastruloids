@@ -13,23 +13,26 @@
 #   A  model ingredients, drawn as vector shapes
 #   B  no / medium / strong confinement through time (3D, each panel one embedded image)
 #   C  the phase space, log10 N0 against the plate gap, in the colours of the sketch,
-#      with the three outcomes as 3D insets
+#      with the iso-area lines and each outcome as a 3D inset on its own region
 # Text stays text and every panel is its own object, so all of it can be moved and
 # edited in Inkscape.
 
-using Statistics, Printf, DelimitedFiles, JLD2, CairoMakie
+using Statistics, Printf, DelimitedFiles, JLD2
+using CairoMakie                 # the page (vector, editable in Inkscape)
+import GLMakie                   # the 3D panels, rendered as images (translucent C, cells3d!)
+# GLMakie renders in a small hidden window (a visible one fails without a desktop session, and
+# GLMakie caps the window at the screen size); the page itself is CairoMakie
+GLMakie.activate!(visible = false, scalefactor = 0.3, px_per_unit = 1)
+CairoMakie.activate!()
 include(joinpath(@__DIR__, "gastruloids_analysis.jl"))
 
 const FIG  = length(ARGS) >= 1 ? ARGS[1] : joinpath(@__DIR__, "..", "figures")
 const DATA = joinpath(FIG, "data")
 
-# the sketch's colours: T+ (B) green, T- (C) orange; regions grey / cyan / pink
-const CELL = Dict(2 => Makie.to_color("#3fa535"), 3 => Makie.to_color("#f5b041"))
-const REGION = Dict(
-	"POLARISED" => Makie.to_color("#a9a9a9"),   # grey
-	"CENTRAL"   => Makie.to_color("#1fb3c8"),   # cyan
-	"PATTERN"   => Makie.to_color("#ee82b4"),   # pink
-	"OTHER"     => Makie.to_color("#e6e6e6"))
+# the sketch's colours: T+ (B) green, T- (C) yellow (the C of every other figure);
+# regions grey / cyan / pink (PHASE_COLORS, the same as the report's phase space)
+const CELL = Dict(2 => Makie.to_color("#3fa535"), 3 => color_map[3])
+const REGION = PHASE_COLORS
 const REGION_TEXT = Dict("POLARISED" => "polarisation", "CENTRAL" => "no polarisation", "PATTERN" => "patterns")
 
 # ---- small drawing helpers ------------------------------------------------------------
@@ -67,31 +70,43 @@ function sketch_axis(pos; title = "", lims = (-1.6, 1.6, -1.3, 1.3), kw...)
 end
 
 """
-One 3D panel in the sketch colours, rasterised (one image in the PDF).
-:top     seen from above, cells above the mid-plane left out
-:oblique a three-quarter view, cells above the mid-plane left out (the B pattern shows
-         on the cut face, the slab keeps its thickness)
+One 3D panel in the sketch colours, as one image in the PDF at `bbox`.
+:top     seen from above
+:oblique a three-quarter view
+ghost = nothing: opaque, the cells above the mid-plane left out (the cutaway of the
+confined aggregates); ghost = GHOST: the whole aggregate, C translucent (unconfined).
+As in draw_cells!. The panel is rendered with GLMakie at `scale` pixels per point and
+placed as an image, its white background made transparent; the rest of the page stays vector
+(CairoMakie). `bs` is the half-width of the box: the same for every panel = the same scale.
 """
-function cells3d!(pos, c; view = :oblique, bs = nothing, kw...)
+function cells3d!(fig, c; view = :oblique, bs = nothing, bbox, scale = 4, ghost = nothing)
 	x, y, z, r, s = c.x, c.y, c.z, c.r, c.cell_state
 	xc, yc, zc = mean(x), mean(y), mean(z)
+	if ghost === nothing                        # the cutaway
+		k = findall(w -> w <= zc + 0.2, z)
+		x, y, z, r, s = x[k], y[k], z[k], r[k], s[k]
+	end
 	bs = bs === nothing ? max(maximum(x) - minimum(x), maximum(y) - minimum(y)) / 2 + 1.5 : bs
-	keep = findall(w -> w <= zc + 0.2, z)
-	ax = Axis3(pos; aspect = :data, azimuth = view == :top ? 0.0 : -pi/2 + 0.35,
-			   elevation = view == :top ? pi/2 : pi/6, protrusions = 0, viewmode = :fit, kw...)
+	w, h = round.(Int, scale .* Makie.widths(bbox))
+	g = Figure(size = (w, h), figure_padding = 0, backgroundcolor = :white)
+	ax = Axis3(g[1, 1]; aspect = :data, azimuth = view == :top ? 0.0 : -pi/2 + 0.35,
+			   elevation = view == :top ? pi/2 : pi/6, protrusions = 0, viewmode = :fit)
 	hidedecorations!(ax); hidespines!(ax)
 	ax.xspinesvisible = false; ax.yspinesvisible = false; ax.zspinesvisible = false
-	o = sort(keep; by = m -> s[m], rev = true)
-	meshscatter!(ax, x[o] .- xc, y[o] .- yc, z[o] .- zc; markersize = r[o], color = [CELL[s[m]] for m in o],
-				 rasterize = 4)
+	cells_mesh!(ax, x .- xc, y .- yc, z .- zc, r, s; ghost = ghost, cmap = CELL)
 	# a flat slab gets a flat box, so it fills the panel
 	zl = view == :oblique ? (minimum(z) - zc - 1.5, maximum(z) - zc + 1.5) : (-bs, bs)
 	xlims!(ax, -bs, bs); ylims!(ax, -bs, bs); zlims!(ax, zl...)
-	ax
+	f = tempname() * ".png"
+	save(f, g; backend = GLMakie)
+	axi = Axis(fig; bbox = bbox, aspect = DataAspect(), backgroundcolor = :transparent)
+	hidedecorations!(axi); hidespines!(axi)
+	# GLMakie cannot draw on a transparent background: the white is made transparent here,
+	# so a panel placed on the phase space shows the region's colour around the cells
+	img = [min(p.r, p.g, p.b) > 0.99f0 ? RGBAf(1, 1, 1, 0) : RGBAf(p.r, p.g, p.b, 1) for p in Makie.FileIO.load(f)]
+	image!(axi, rotr90(img))
+	axi
 end
-
-"A darker shade of a colour, for text on the region colours."
-darker(c) = RGBf(0.55c.r, 0.55c.g, 0.55c.b)
 
 # ---- data -----------------------------------------------------------------------------
 
@@ -103,18 +118,24 @@ COLS = (1, 3, 4)                     # fig2 columns: fB 0.6 (seeding), 0.3, 0.2 
 ROWS = ((1, "no\nconfinement", :top), (2, "medium\nconfinement", :oblique), (3, "strong\nconfinement", :oblique))
 
 p_dir = joinpath(DATA, "phase_space")
+# the readout the phase-space figure draws (readout.txt; class_02 for the October figures)
+ccol = isfile(joinpath(p_dir, "readout.txt")) ? String(strip(read(joinpath(p_dir, "readout.txt"), String))) : "class_02"
 raw, hdr = readdlm(joinpath(p_dir, "phase_space.csv"), ','; header = true)
 col = Dict(strip(String(hdr[i])) => i for i in eachindex(hdr))
-rows = [(layers = Float64(raw[i, col["layers"]]), N0 = Int(raw[i, col["N0"]]), class = String(raw[i, col["class_02"]]))
-		for i in 1:size(raw, 1)]
+lcol = replace(ccol, r"_02$" => "_012")      # the same readout later: breaks ties in the background
+rows = [(layers = Float64(raw[i, col["layers"]]), N0 = Int(raw[i, col["N0"]]), class = String(raw[i, col[ccol]]),
+		 late = haskey(col, lcol) ? String(raw[i, col[lcol]]) : String(raw[i, col[ccol]])) for i in 1:size(raw, 1)]
+# the pancake area at squeezing, for the iso-area lines
+cont = haskey(col, "A_um2") ? [(layers = r.layers, N0 = r.N0, A = Float64(raw[i, col["A_um2"]])) for (i, r) in enumerate(rows)] : nothing
 raw, hdr = readdlm(joinpath(p_dir, "free.csv"), ','; header = true)
 fc = Dict(strip(String(hdr[i])) => i for i in eachindex(hdr))
-free = [(N0 = Int(raw[i, fc["N0"]]), class = String(raw[i, fc["class_02"]])) for i in 1:size(raw, 1)]
+free = [(N0 = Int(raw[i, fc["N0"]]), class = String(raw[i, fc[ccol]]),
+		 late = haskey(fc, lcol) ? String(raw[i, fc[lcol]]) : String(raw[i, fc[ccol]])) for i in 1:size(raw, 1)]
 
 # ---- the page: A4 in points, everything placed by hand (bbox = left, right, bottom, top) ----
 
 W, H = 595, 842
-fig = Figure(size = (W, H), fontsize = 10, figure_padding = 0)
+fig = Figure(size = (W, H), fontsize = 10, figure_padding = 0, fonts = TEX_FONTS)
 # a transparent page-sized axis for the free text and lines
 page = Axis(fig; bbox = BBox(0, W, 0, H), backgroundcolor = :transparent)
 hidedecorations!(page); hidespines!(page); limits!(page, 0, W, 0, H)
@@ -139,8 +160,8 @@ ax = sketch_axis(fig; title = "differentiation", bbox = BBox(320, 440, 705, 805)
 cell!(ax, (-0.95, 0.2); r = 0.32, fill = CELL[2]); cell!(ax, (0.95, 0.2); r = 0.32, fill = CELL[3])
 arrow!(ax, (-0.5, 0.2), (0.5, 0.2); head = 0.18)
 text!(ax, 0, 0.35; text = "q", align = (:center, :bottom), fontsize = 13)
-text!(ax, -0.95, -0.25; text = "T+", align = (:center, :top), fontsize = 11)
-text!(ax, 0.95, -0.25; text = "T−", align = (:center, :top), fontsize = 11)
+text!(ax, -0.95, -0.25; text = "B (T+)", align = (:center, :top), fontsize = 11)
+text!(ax, 0.95, -0.25; text = "C (T−)", align = (:center, :top), fontsize = 11)
 ax = sketch_axis(fig; title = "friction", bbox = BBox(450, 570, 705, 805))
 cell!(ax, (-0.45, -0.1); r = 0.32); cell!(ax, (0.45, 0.1); r = 0.32)
 arrow!(ax, (-0.3, 0.12), (0.05, 0.75); head = 0.16); text!(ax, 0.12, 0.75; text = "v", fontsize = 11)
@@ -157,7 +178,8 @@ for (i, (row, name, view)) in enumerate(ROWS)
 	text!(page, 140, rowy(i) + 41; text = name, align = (:right, :center), justification = :right, fontsize = 10)
 	for (j, c) in enumerate(COLS)
 		p = panel(row, c)
-		cells3d!(fig, p.cells; view = view, bbox = BBox(colx(j), colx(j) + 140, rowy(i), rowy(i) + 82))
+		cells3d!(fig, p.cells; view = view, bbox = BBox(colx(j), colx(j) + 140, rowy(i), rowy(i) + 82),
+				 ghost = row == 1 ? GHOST : nothing)     # C translucent in the unconfined row only
 		i == 2 && push!(hours, p.meta["hours"])
 	end
 end
@@ -173,18 +195,29 @@ for j in eachindex(COLS)
 end
 text!(page, W - 18, yt + 5; text = "time", align = (:right, :bottom), fontsize = 11)
 
-# C: the phase space (y 40-390), insets on the right
+# C: the phase space (y 40-390), each example on its own region
 letter(28, 382, "C")
-axC = phase_space!(fig, rows; free = free, x = :log, y = :layers, colors = REGION, background = 0.45,
-				   fontsize = 12, pie_scale = 0.5, region_labels = REGION_TEXT,
-				   axis = (bbox = BBox(80, 420, 50, 372),))
-axC.xlabel = "log₁₀ N0 (number of cells at squeezing)"; axC.ylabel = "number of layers"
-for (k, (pnl, name)) in enumerate((((1, 3), "polarisation (unconfined)"), ((2, 3), "no polarisation"), ((3, 3), "patterns")))
-	y0 = 262 - (k - 1) * 105
-	cells3d!(fig, panel(pnl...).cells; view = :top, bbox = BBox(445, 565, y0, y0 + 95))
-	text!(page, 505, y0 + 97; text = name, align = (:center, :bottom), fontsize = 9, color = darker(REGION[("POLARISED", "CENTRAL", "PATTERN")[k]]))
+# the same chart as the report's phase space (November): the regions' colours and the
+# iso-area lines; stretched to the width of the page (no equal aspect)
+axC = phase_space!(fig, rows; free = free, x = :log, y = :layers, colors = REGION, background = 0.5,
+				   fontsize = 12, contours = cont, contour_width = 1.4, contour_labelsize = 7,
+				   axis = (bbox = BBox(80, 575, 50, 372), aspect = nothing))
+# the readout frames of the rows of B (fig2 column 4), each titled with its outcome in the
+# colour of its region and placed on that region, at (u, v) in the chart's coordinates
+# (N0 across 0-10, the gap up 0-8, the unconfined row at 9.4; phase_space!)
+Makie.update_state_before_display!(fig)
+vp = axC.scene.viewport[]
+lim = axC.finallimits[]
+topage(u, v) = (vp.origin[1] + (u - lim.origin[1]) / lim.widths[1] * vp.widths[1],
+				vp.origin[2] + (v - lim.origin[2]) / lim.widths[2] * vp.widths[2])
+for (pnl, cls, (u, v)) in (((1, 4), "POLARISED", (1.8, 6.0)), ((2, 4), "CENTRAL", (8.7, 6.0)), ((3, 4), "PATTERN", (7.6, 1.0)))
+	cx, cy = topage(u, v)
+	cells3d!(fig, panel(pnl...).cells; view = :top, bbox = BBox(cx - 60, cx + 60, cy - 50, cy + 50),
+			 ghost = cls == "POLARISED" ? GHOST : nothing)
+	text!(page, cx, cy + 30; text = PHASE_NAMES[cls], align = (:center, :bottom), fontsize = 11, font = :bold,
+		  color = darker(REGION[cls]))
 end
 
-save(joinpath(FIG, "presentation.pdf"), fig; pt_per_unit = 1)
-save(joinpath(FIG, "presentation.png"), fig; px_per_unit = 3)
+save(joinpath(FIG, "presentation.pdf"), fig; pt_per_unit = 1, backend = CairoMakie)
+save(joinpath(FIG, "presentation.png"), fig; px_per_unit = 3, backend = CairoMakie)
 println("wrote ", joinpath(FIG, "presentation.pdf"))

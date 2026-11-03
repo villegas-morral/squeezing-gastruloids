@@ -1,6 +1,7 @@
 \documentclass{article}
 
 \usepackage{graphicx} % Required for inserting images
+\usepackage{placeins}                             % \FloatBarrier
 \usepackage{parskip}                              % no indent
 \usepackage{setspace}                             % line spacing, we'll use \setstretch{1.2}
 \usepackage[a4paper, bottom=3cm]{geometry}
@@ -63,20 +64,27 @@
 %               TITLE              %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\newgeometry{top=1.5cm, bottom=1.5cm, left=1.5cm, right=1.5cm}
+
 \title{3D modelling of confined gastruloid aggregates}
 
-\author{
-    David Oriola$^{1}$,
-    Víctor Villegas-Morral$^{1}$,
-    Vanessa Weichselberger$^{2}$,
-    \\[1.5ex]
-    \small $^{1}$Universitat Politècnica de Catalunya\\
-    \small $^{3}$EMBL
-}
+% \author{
+%     David Oriola$^{1}$,
+%     Víctor Villegas-Morral$^{1}$,
+%     Vanessa Weichselberger$^{2}$,
+%     \\[1.5ex]
+%     \small $^{1}$Universitat Politècnica de Catalunya,\
+%     \small $^{3}$EMBL
+% }
 
 \date{\today}
 
-\maketitle
+% manual title: \maketitle leaves an empty author line when \author is unset
+\begin{center}
+    {\LARGE 3D modelling of confined gastruloid aggregates\par}
+    \vspace{0.5em}
+    {\large \today\par}
+\end{center}
 
 
 
@@ -85,13 +93,13 @@
 %       OVERVIEW                   %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{figure}[h]
+\begin{figure}[!h]
     \centering
-    \includegraphics[width=0.85\linewidth]{figures/overview.pdf}
+    \includegraphics[width=0.82\linewidth]{figures/overview.pdf}
     \caption{Overview. 
         (A) Model ingredients. 
         (B) Evolution of same aggregate ($N_0=600$ cells) without confinement, with medium confinement (4 layers) and with strong confinement (1 layer).
-        (C) Outcome phase space: number of initial cells against the number of layers between the plates.}
+        (C) Outcome phase space: number of initial cells against the number of layers between the plates, read when $20\%$ of the cells are $B$. Lines: area of the pancake at squeezing ($\mu$m$^2$). Each example sits on its region: the last frames of the rows of (B).}
     \label{fig:overview}
 \end{figure}
 
@@ -103,6 +111,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \clearpage
+\restoregeometry
 \setcounter{tocdepth}{1}
 \tableofcontents
 
@@ -123,12 +132,75 @@ In the expriments, they grow a gastruloid and confine it right before polarisati
 \end{enumerate}
 Determining whether confinement is strong or weak is not trivial and is actually key to this research. The experiments observe that the larger the intitial size on squeezing, the most layers we also get clusters with.
 
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.65\linewidth]{figures/exp-confinement-time.png}
+    \caption{
+        T/Bra patterning under light, medium and strong confinement (columns) at 78\,h, 84\,h and 96\,h, i.e.\ 6\,h, 12\,h and 24\,h under confinement (rows).
+        Each aggregate is shown from the top (xy) and from the side (xz).
+        Light confinement keeps a pole, medium confinement keeps the T/Bra cells in the centre and strong confinement breaks them into clusters.
+        From V.~Weichselberger's poster.}
+    \label{fig:exp-confinement-time}
+\end{figure}
+
 The experimentalists image the aggregate and track the cells in order to perform certain measurements.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.7\linewidth]{figures/exp-segmentation.png}
+    \caption{
+        3D segmentation of gastruloids after 24\,h in suspension or under light, medium and strong confinement, seen from the top (xy) and from the side (xz).
+        From V.~Weichselberger's poster.}
+    \label{fig:exp-segmentation}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.32\linewidth]{figures/exp-microscopy.png}
+
+    \includegraphics[width=0.32\linewidth]{figures/exp-segmented-1.png}
+    \includegraphics[width=0.32\linewidth]{figures/exp-segmented-2.png}
+    \caption{
+        Confined gastruloids in the experiments.
+        Top: microscopy image of an aggregate with several T/Bra clusters (T/Bra in orange, nuclei in blue).
+        Bottom: two segmented aggregates, with T/Bra-positive cells in light blue.}
+    \label{fig:exp-aggregates}
+\end{figure}
 
 
 \paragraph{Spatial cluster quantification.} It is used to determine whether clusters have formed.
 
 Spatial clustering was quantified using a density-based clustering approach adapted from DBSCAN (Density-Based Spatial Clustering of Applications with Noise). Clusters were identified based on the local enrichment and spatial connectivity of cells belonging to the cell type B population. For each cell, the fraction of neighbouring cells belonging to the same population was calculated within a defined three-dimensional Euclidean radius of 13 µm, considering all surrounding cells as the reference. Cells for which at least $40\%$ of neighbouring cells belonged to the population of interest were defined as core cells. Core cells were grouped into the same cluster if they were directly or indirectly connected through other core cells within a maximum pairwise distance of 13 µm. Cells belonging to the population of interest that did not fulfil the core-cell criterion were assigned as border cells to the cluster of their nearest core cell, provided that this core cell was located within 13 µm. Only clusters containing at least 20 cells, including core and border cells, were retained for further analysis. Clustering was quantified based on the number of clusters, the fraction of cells assigned to clusters, cluster sizes, and the effective number of clusters ($N_\text{eff}$), which accounts for differences in cluster size distribution. The latter was calculated as $N_\text{eff} = \frac{1}{\sum p_i ^2}$, where $p_i$ represents the fraction of all clustered cells belonging to cluster i, providing a measure of cluster number that accounts for differences in cluster size.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.32\linewidth]{figures/exp-clusters-1-all.png}
+    \hfill
+    \includegraphics[width=0.32\linewidth]{figures/exp-clusters-2-all.png}
+    \hfill
+    \includegraphics[width=0.32\linewidth]{figures/exp-clusters-3-all.png}
+
+    \vspace{0.5em}
+    \includegraphics[width=0.32\linewidth]{figures/exp-clusters-1-only.png}
+    \hfill
+    \includegraphics[width=0.32\linewidth]{figures/exp-clusters-2-only.png}
+    \hfill
+    \includegraphics[width=0.32\linewidth]{figures/exp-clusters-3-only.png}
+    \caption{
+        Spatial cluster quantification on three experimental aggregates.
+        Top: all cells, coloured by the cluster they are assigned to.
+        Bottom: only the cells assigned to clusters.}
+    \label{fig:exp-clusters}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\linewidth]{figures/exp-extreme-confinement.png}
+    \caption{
+        T/Bra clusters in gastruloids under extreme confinement at 84\,h and 96\,h (preliminary data), seen from the top (xy) and from the side (xz).
+        From V.~Weichselberger's poster.}
+    \label{fig:exp-extreme-confinement}
+\end{figure}
 
 
 \paragraph{Polarisation.}
@@ -152,6 +224,7 @@ The cutoff is set to 0.3. To determine it we just looked at the polarisation his
 
 
 
+\FloatBarrier
 \section{The physical description}
 
 \subsection{Simplificating reality}
@@ -273,7 +346,7 @@ Figure~\ref{initial-condition} shows the initial aggregate.
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.8\linewidth]{figures/fig1_initial_condition.png}
-    \caption{Initial condition: a  $B$-centroid containing $60\%$ of the cells in the aggregate; the rest are $C$. Left: 2 layers, $N_0=2400$. Middle: unconfined, $N_0=600$. Right: a diluted core, which is not used.}
+    \caption{Initial condition: a  $B$-centroid containing $60\%$ of the cells in the aggregate; the rest are $C$. Left: 2 layers, top view cut at the mid-plane; right: unconfined, whole aggregate with $C$ translucent; both $N_0=600$, drawn at the same scale, at the start of differentiation ($t = 0$).}
     \label{initial-condition}
 \end{figure}
 
@@ -295,7 +368,7 @@ Unconfined aggregates of up to $N_0 = 600$ cells polarise before $B$ runs out (F
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\linewidth]{figures/fig4_unconfined.png}
-    \caption{Unconfined aggregates of $N_0 = 150$ to $2400$ cells when $20\%$ of the cells are $B$. Top: cut at the mid-plane; bottom: whole aggregate. Rotated so that $B$ points to the right.}
+    \caption{Unconfined aggregates of $N_0 = 150$ to $2400$ cells when $20\%$ of the cells are $B$ (17 to 19~h after the start of differentiation). Top and front views of the whole aggregate, $C$ translucent. Rotated so that $B$ points to the right.}
     \label{polarisation}
 \end{figure}
 
@@ -306,14 +379,14 @@ Figure~\ref{behaviours} follows the same aggregate under no, medium and strong c
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\linewidth]{figures/fig2_behaviours.png}
-    \caption{$N_0=600$ cells with no confinement (polarises), 4 layers (central cluster that differentiates away) and 1 layer (islands), from the seeding to $12\%$ of $B$ cells. The readout is at $20\%$.}
+    \caption{$N_0=600$ cells with no confinement (polarises), 4 layers (central cluster that differentiates away) and 1 layer (islands), from the start of differentiation ($0$~h) to $12\%$ of $B$ cells ($26$--$27$~h). The readout is at $20\%$ ($18$--$19$~h). Confined: top view cut at the mid-plane; unconfined: whole aggregate, $C$ translucent.}
     \label{behaviours}
 \end{figure}
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\linewidth]{figures/fig3_patterns.png}
-    \caption{Patterns when $20\%$ of the cells are $B$, from one to four layers.}
+    \caption{Patterns when $20\%$ of the cells are $B$ (the readout, $11$ to $24$~h after the start of differentiation depending on the run, $18$~h on average), from one to three layers. Top view cut at the mid-plane.}
     \label{patterns}
 \end{figure}
 
@@ -322,7 +395,7 @@ In thick slabs the pattern starts as a ring: the core hollows out and then break
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\linewidth]{figures/ring-3layers.png}
-    \caption{Three layers, $N_0 = 2400$: the central cluster hollows into a ring, which breaks into islands. Top: cut at the mid-plane; bottom: side view.}
+    \caption{Three layers, $N_0 = 2400$: the central cluster hollows into a ring, which breaks into islands, from the start of differentiation to $27$~h. Top: cut at the mid-plane; bottom: side view.}
     \label{ring}
 \end{figure}
 
@@ -360,11 +433,40 @@ What changes the outcome is the cohesion of the $B$ tissue. In a slab of one or 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\linewidth]{figures/dissolves-muBB1.8.png}
-    \caption{With $\mu_{BB}=1.8$ the $B$ cells dissolve into the $C$ tissue (2 layers, $N_0 = 300$).}
+    \caption{With $\mu_{BB}=1.8$ the $B$ cells dissolve into the $C$ tissue (2 layers, $N_0 = 300$), from the start of differentiation to $28$~h.}
     \label{dissolves}
 \end{figure}
 
 The new parameter set keeps the other behaviours: small squeezed aggregates keep a central cluster, monolayers give sparse islands, unconfined aggregates polarise, and $BC$ fusion glues.
+
+\subsection{Reading the outcome}
+
+The outcome is read from the positions $\mathbf{x}_i$ and states $s_i$ of the cells when $20\%$ of them are $B$, with the experiments' clustering and polarisation (see \emph{The experiment}), adapted to the size of our aggregates.
+
+\paragraph{Clusters.} Let $\rho = 2.6\,r = 13~\mu$m and let $\mathcal{N}_i = \{\, j \neq i : |\mathbf{x}_i - \mathbf{x}_j| \le \rho \,\}$ be the neighbours of cell $i$. A $B$ cell is a \emph{core} cell if at least a fraction $\phi$ of its neighbours are $B$:
+\begin{equation*}
+    i \in \mathcal{K} \iff s_i = B, \quad \mathcal{N}_i \neq \emptyset \quad \text{and} \quad \big|\{\, j \in \mathcal{N}_i : s_j = B \,\}\big| \ \ge\ \phi\, |\mathcal{N}_i| .
+\end{equation*}
+Two core cells are linked if $|\mathbf{x}_i - \mathbf{x}_j| \le \rho$, and the clusters are the connected components of the graph of core cells with these links. Every other $B$ cell with a core cell within $\rho$ joins the cluster of its nearest core cell (a \emph{border} cell); the remaining $B$ cells belong to no cluster. Clusters of fewer than $n_\text{min}$ cells (core and border) are discarded. If $n_1, \dots, n_K$ are the sizes of the clusters kept and $p_k = n_k / \sum_l n_l$, the effective number of clusters is
+\begin{equation*}
+    N_\text{eff} = \frac{1}{\sum_{k=1}^K p_k^2} ,
+\end{equation*}
+which is $K$ when the clusters have the same size and close to $1$ when one of them holds most of the cells.
+
+\paragraph{Polarisation.} With $\bar{\mathbf{x}} = \frac1N \sum_i \mathbf{x}_i$ the centre of mass of the aggregate and $\bar{\mathbf{x}}_B$ that of the $B$ cells, let $\mathbf{e}_1$ be the first principal axis of the cell positions (the leading eigenvector of $\frac1N\sum_i (\mathbf{x}_i - \bar{\mathbf{x}})(\mathbf{x}_i - \bar{\mathbf{x}})^\top$) and $u_i = (\mathbf{x}_i - \bar{\mathbf{x}})\cdot\mathbf{e}_1$. Then
+\begin{equation*}
+    P = \frac{|\bar{\mathbf{x}}_B - \bar{\mathbf{x}}|}{R}, \qquad R = \tfrac12\big(\max_i u_i - \min_i u_i\big) .
+\end{equation*}
+
+\paragraph{Outcome.} In this order:
+\begin{enumerate}
+    \item \emph{other}, if no cluster is kept ($K = 0$);
+    \item \emph{Polarisation}, if $P \ge 0.3$;
+    \item \emph{Clusters}, if $N_\text{eff} \ge 1.5$;
+    \item \emph{B-centroid} otherwise: one dominant cluster that has not moved. A ring that has not broken is a $B$-centroid, as in the experiments' medium confinement.
+\end{enumerate}
+
+\paragraph{Differences with the experiments.} We keep clusters of $n_\text{min} = 10$ cells instead of $20$, because our aggregates are $10$ to $100$ times smaller (with $20$, monolayers of up to $300$ cells have no cluster at all). A core cell needs half of its neighbours to be $B$ ($\phi = 0.5$) instead of $40\%$ ($\phi = 0.4$): with $40\%$, a ring whose pieces still touch through threads of one or two $B$ cells is one cluster, and with $50\%$ these threads are border cells and the pieces are separate clusters. The radius $\rho$ and the cutoffs $P \ge 0.3$ and $N_\text{eff} \ge 1.5$ are those of the experiments.
 
 \subsection{Phase space}
 
@@ -373,7 +475,7 @@ Finally, we compute the phase space relating the outcome, the number of layers a
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\linewidth]{figures/phase_space.png}
-    \caption{Phase space. Each point is a pie of the outcomes of its simulations; the background is the outcome of the nearest point. Dashed: patterns from here on; dotted: polarised up to here. Right: examples of each outcome.}
+    \caption{Phase space, read when $20\%$ of the cells are $B$ ($18$~h after the start of differentiation on average). The colour is the majority outcome of the nearest simulated point (a tie between seeds goes to the outcome that wins later, at $12\%$). Lines: area of the pancake at squeezing ($\mu$m$^2$). Right: one example of each outcome (8 layers, $N_0 = 300$; 3 layers, $N_0 = 1200$; 2 layers, $N_0 = 1200$).}
     \label{phase-space}
 \end{figure}
 
@@ -385,11 +487,11 @@ Finally, we compute the phase space relating the outcome, the number of layers a
         \textbf{Layers} & \textbf{Polarised up to $N_0$} & \textbf{Central cluster} & \textbf{Patterns from $N_0$} \\
         \hline
         1 & -- & 75--150 & $\approx 160$ \\
-        2 & 75 & 89--212 & $\approx 250$ \\
-        3 & 150--178 & 212--1200 & $\approx 1300$ \\
-        4 & 212 & 300--3394 & between 3394 and 4800 \\
-        6--12 & 600--1000 & up to 2400 & none up to 2400 \\
-        unconfined & 600 & 849--4800 & none up to 4800 \\
+        2 & 75 & 89--424 & $\approx 500$ \\
+        3 & 150--178 & 212--1697 & $\approx 2000$ \\
+        4 & 212 & 300--4800 & none up to 4800 \\
+        6--12 & 600--1200 & up to 2400 & none up to 2400 \\
+        unconfined & 600--849 & 1200--4800 & none up to 4800 \\
         \hline
     \end{tabular}
     }
@@ -402,7 +504,7 @@ The threshold for patterns grows quickly with the thickness, from $N_0 \approx 1
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\linewidth]{figures/phase_space_diameter.png}
-    \caption{The same phase space against the diameter of the pancake at the moment of squeezing, in cell diameters.}
+    \caption{The same phase space against the diameter of the pancake at the moment of squeezing, in cell diameters (read when $20\%$ of the cells are $B$).}
     \label{phase-space-diameter}
 \end{figure}
 
@@ -411,8 +513,45 @@ The outcome depends on when it is read. Figure~\ref{phase-space-late} shows the 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=\linewidth]{figures/phase_space_late.png}
-    \caption{The same simulations, read when $12\%$ of the cells are $B$.}
+    \caption{The same simulations, read when $12\%$ of the cells are $B$ (about $26$~h after the start of differentiation).}
     \label{phase-space-late}
+\end{figure}
+
+\subsection{Damköhler number}
+
+The Damköhler number compares how fast cells differentiate with how fast they mix,
+\begin{equation*}
+    \mathrm{Da} = \frac{q\,\ell^2}{D},
+\end{equation*}
+where $q$ is the $B\to C$ rate, $D$ the diffusion coefficient of the cells and $\ell$ a length. If $\mathrm{Da}\gg1$, a cell differentiates long before it has moved a distance $\ell$, so the $B$ pattern is set where the cells already are. If $\mathrm{Da}\ll1$, cells mix over $\ell$ before they differentiate.
+
+There is no noise in the model: cells move only because their neighbours divide and push them, and because differentiation changes the adhesion. We therefore measure $D$ in growing monolayers (one layer, $N_0 = 600$ and $2400$, two seeds each), saving one frame every time unit (4 minutes). Each cell is followed between two of its divisions, and only its in-plane displacement is used. The spreading of the slab as it grows is not diffusion, so it is removed from every displacement with an affine fit of the displacement field, $\mathbf u = A\,\mathbf r + \mathbf b$. As a check we also use the displacement relative to the neighbours within $5r$. Cells in the outer $20\%$ of the radius are left out. The mean squared displacement is then fitted with a straight line at long lag times (2 to 8~h),
+\begin{equation*}
+    \langle |\Delta \mathbf r|^2 \rangle = 4 D \tau + c .
+\end{equation*}
+
+The MSD is nearly linear from 4~min to 10~h (Figure~\ref{msd}). Between 2 and 8~h its log--log slope is $1.2$--$1.3$, so some directed motion remains: local flows that a single affine fit cannot remove, such as $B$ growing faster than $C$ and the sorting of the two. The sizes and the seeds agree within $20\%$:
+\begin{equation*}
+    D \approx 0.004\, r^2 \text{ per time unit} \approx 1.5~\mu\mathrm{m}^2/\mathrm{h}
+\end{equation*}
+for $B$ and $C$ cells alike ($0.0025$--$0.0034\, r^2$ per time unit relative to the neighbours).
+
+With $q = 0.004667$ per time unit:
+\begin{itemize}
+    \item for $\ell$ one cell diameter, $\mathrm{Da} \approx 4$--$8$: a cell needs about $17$~h to move by its own diameter, longer than a $B$ cell lives ($1/q \approx 14$~h);
+    \item for $\ell$ the radius of the pancake at squeezing, $\mathrm{Da} \approx 500$--$1000$ at $N_0=600$ and $2100$--$3800$ at $N_0=2400$.
+\end{itemize}
+Differentiation is therefore much faster than single-cell mixing at every size. For a fixed $D$, $\mathrm{Da}$ grows with the pancake area ($\mathrm{Da}\approx 0.015\,A/\mu\mathrm{m}^2$ for a monolayer), so the iso-area lines of the phase space are also lines of constant $\mathrm{Da}$, and the pattern threshold, at $A \approx 1.5\times10^4~\mu\mathrm{m}^2$, sits at $\mathrm{Da}\approx 200$.
+
+\begin{remark}
+    Over one frame (4~min) a cell moves about $0.04\,r \approx 0.2~\mu$m, i.e.\ $0.05~\mu$m/min. This is about 25 times slower than the instantaneous cell speed $V_0 \approx 1.25~\mu$m/min used to set the time unit $T_0 = R_0/V_0 = 4$~min.
+\end{remark}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\linewidth]{figures/msd.png}
+    \caption{Mean squared displacement of $B$ (green) and $C$ (yellow) cells in growing monolayers ($N_0 = 600$ dashed, $2400$ solid). Left: growth flow removed with an affine fit; right: relative to the neighbours within $5r$. Shaded: the lag times of the fit.}
+    \label{msd}
 \end{figure}
 
 
@@ -434,33 +573,35 @@ Table~\ref{parameters} gives the parameters of the July report (old) and the one
 
 {\small                                 % smaller font size for the table
 \begin{xltabular}{\textwidth}{
-    >{\centering\arraybackslash}p{0.10\textwidth}   % symbol
+    >{\centering\arraybackslash}p{0.08\textwidth}   % symbol
     X                                               % description
-    >{\centering\arraybackslash}p{0.21\textwidth}   % old value
-    >{\centering\arraybackslash}p{0.21\textwidth}   % new value
+    >{\centering\arraybackslash}p{0.17\textwidth}   % Oriola et al. 2026
+    >{\centering\arraybackslash}p{0.17\textwidth}   % old value
+    >{\centering\arraybackslash}p{0.17\textwidth}   % new value
 }
-\caption{Parameters of the July report (old) and of this report (new). Values in \chg{red} have changed.}
+\caption{Parameters of Oriola et al.\ 2026 (DO, Tables S4--S5 and Supplementary Note S2), of the July report (old) and of this report (new). Values in \chg{red} have changed with respect to the July report.}
 \label{parameters}\\
 \hline
-\textbf{Symbol} & {\textbf{Description}} & \textbf{Sotiris} & \textbf{Current} \\      % header
+\textbf{Symbol} & {\textbf{Description}} & \textbf{DO} & \textbf{Sotiris} & \textbf{Current} \\      % header
 \hline
 \endfirsthead
 \hline
-\textbf{Symbol} & {\textbf{Description}} & \textbf{Sotiris} & \textbf{Current} \\
+\textbf{Symbol} & {\textbf{Description}} & \textbf{DO} & \textbf{Sotiris} & \textbf{Current} \\
 \hline
 \endhead
 \hline
 \endfoot
-    $\Delta t$ & Timestep & 0.02 & \chg{0.015} \\
-    $ r$ & Radius & 1 & 1 \\
-     & Overlap factor & 0.3 & 0.3 \\
-    $\alpha$ & Cell-ECM/cell-cell friction parameter & 0.9 & 0.9 \\
-    $\tau_\text{div}^A$ & Average division time & 300 & \chg{-- (no $A$ cells)} \\
-    $\tau_\text{div}^B$ & Average division time & 300 & 300 \\
-    $\tau_\text{div}^C$ & Average division time & 750 & 750 \\
-    $\sigma_\text{div}$ & Division time variability & 0.5 & 0.5 \\
-    $\lambda$ & Global friction coefficient & 1 & 1 \\
-    $\mu$ & Force range factor & $\begin{pmatrix}
+    $\Delta t$ & Timestep & 0.02 & 0.02 & \chg{0.015} \\
+    $ r$ & Radius & 1 & 1 & 1 \\
+     & Overlap factor & 0.3 & 0.3 & 0.3 \\
+    $\alpha$ & Cell-ECM/cell-cell friction parameter & 0.9 & 0.9 & 0.9 \\
+    $\tau_\text{div}^A$ & Average division time & 300 & 300 & \chg{-- (no $A$ cells)} \\
+    $\tau_\text{div}^B$ & Average division time & 300 & 300 & 300 \\
+    $\tau_\text{div}^C$ & Average division time & 750 & 750 & 750 \\
+    $\sigma_\text{div}$ & Division time variability & 0.5 & 0.5 & 0.5 \\
+    $N_\text{rel}$ & Division relaxation (neighbour counts) & 150 & -- & -- \\
+    $\lambda$ & Global friction coefficient & 1 & 1 & 1 \\
+    $\mu$ & Force range factor & 2 (all pairs) & $\begin{pmatrix}
         1.55 & 1.5 & 1.525 \\
         1.5  & 1.7 & 1.45 \\
         2.0  & 2.0 & 2.0
@@ -469,8 +610,12 @@ Table~\ref{parameters} gives the parameters of the July report (old) and the one
         \unused & \chg{1.9} & \chg{2} \\
         \unused & 2 & \chg{2.14}
     \end{pmatrix}$ \\
-        & Neighbour range factor &  1 & 1 \\
+        & Neighbour range factor & -- &  1 & 1 \\
     $F_{rep}$ & Repulsion force & $\begin{pmatrix}
+        3 & 3 & 3 \\
+          & 3 & 3 \\
+          &   & 5.1
+    \end{pmatrix}$ & $\begin{pmatrix}
         3 & 3 & 3 \\
           & 3 & 3 \\
           &   & 5.1
@@ -484,25 +629,29 @@ Table~\ref{parameters} gives the parameters of the July report (old) and the one
           & 6 & 1.6 \\
           &   & 4.8
     \end{pmatrix}$ & $\begin{pmatrix}
+        6 & 6 & 2.4 \\
+          & 6 & 1.6 \\
+          &   & 4.8
+    \end{pmatrix}$ & $\begin{pmatrix}
         \unused & \unused & \unused \\
           & \chg{6.4} & 1.6 \\
           &   & \chg{3}
     \end{pmatrix}$ \\
-    $p$ & Fixed transition rate from $A$ to $B$ & 0.009333 & \chg{-- (no $A$ cells)} \\
-    $q$ & Fixed transition rate from $B$ to $C$ & 0.004667 & 0.004667 \\
-    $K$ & Feedback parameter & 0.2 & \chg{-- (no feedback)} \\
-    $\lambda_\text{wall}$ & Plate friction (cells closer than 0.05 to a plate) & -- & \chg{1.5} \\
-     & Plates & -- & \chg{rigid} \\
-    $L$ & Plate gap & -- & \chg{$2.1\,r \times$ layers} \\
-    $\phi_B^0$ & Initial proportion of $B$ cells & -- & \chg{0.6 (central core)} \\
-     & Readout: proportion of $B$ cells & -- & \chg{0.2} \\
-    $n_i$ & Number of neighbours &  &  \\
-    $n_i^X$ & Number of neighbours in state $X$ &  &  \\
-    $\phi_X$ & Proportion of cells in state $X$ &  &  \\
-    $T_0$ & Typical time scale & \SI{4}{\minute} & \SI{4}{\minute} \\
-     & Time units per hour & -- & \chg{15} \\
-    $R_0$ & Typical length scale & \SI{5}{\micro\meter} & \SI{5}{\micro\meter} \\
-    $F_0$ & Typical force scale & \SI{20}{\pico\newton} & \SI{20}{\pico\newton} \\
+    $p$ & Fixed transition rate from $A$ to $B$ & 0.009333 & 0.009333 & \chg{-- (no $A$ cells)} \\
+    $q$ & Fixed transition rate from $B$ to $C$ & 0.004667 & 0.004667 & 0.004667 \\
+    $K$ & Feedback parameter & 0.2 & 0.2 & \chg{-- (no feedback)} \\
+    $\lambda_\text{wall}$ & Plate friction (cells closer than 0.05 to a plate) & -- & -- & \chg{1.5} \\
+     & Plates & -- & -- & \chg{rigid} \\
+    $L$ & Plate gap & -- & -- & \chg{$2.1\,r \times$ layers} \\
+    $\phi_B^0$ & Initial proportion of $B$ cells & -- & -- & \chg{0.6 (central core)} \\
+     & Readout: proportion of $B$ cells & -- & -- & \chg{0.2} \\
+    $n_i$ & Number of neighbours & & &  \\
+    $n_i^X$ & Number of neighbours in state $X$ & & &  \\
+    $\phi_X$ & Proportion of cells in state $X$ & & &  \\
+    $T_0$ & Typical time scale & \SI{4}{\minute} & \SI{4}{\minute} & \SI{4}{\minute} \\
+     & Time units per hour & 15 & -- & \chg{15} \\
+    $R_0$ & Typical length scale & \SI{5}{\micro\meter} & \SI{5}{\micro\meter} & \SI{5}{\micro\meter} \\
+    $F_0$ & Typical force scale & \SI{100}{\pico\newton} & \SI{20}{\pico\newton} & \SI{20}{\pico\newton} \\
 \end{xltabular}
 }
 

@@ -1,9 +1,0 @@
-panel	row	col	views	label	file
-L1_N212	1	1	top	1 layer, N0 212|islands: 2 islands, S = 0.43	L1_N212.csv
-L1_N300	1	2	top	1 layer, N0 300|islands: 3 islands, S = 0.41	L1_N300.csv
-L1_N4800	1	3	top	1 layer, N0 4800|ring: 13 islands, S = 0.37	L1_N4800.csv
-L2_N357	1	4	top	2 layers, N0 357|ring: 1 islands, S = 0.44	L2_N357.csv
-L2_N4800	2	1	top	2 layers, N0 4800|ring: 1 islands, S = 0.34	L2_N4800.csv
-L3_N1427	2	2	top	3 layers, N0 1427|ring: 1 islands, S = 0.53	L3_N1427.csv
-L3_N4800	2	3	top	3 layers, N0 4800|ring: 1 islands, S = 0.40	L3_N4800.csv
-L4_N4800	2	4	top	4 layers, N0 4800|ring: 1 islands, S = 0.61	L4_N4800.csv

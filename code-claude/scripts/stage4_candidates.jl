@@ -53,6 +53,12 @@ const CANDIDATES = Dict(
 	"july_frB4.5_frC6_muB1.85"  => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.85),
 	"july_frB4.5_frC6_muB1.8_faB11" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.8, fatt_BB = 11.1),
 	"july_frB4.5_frC6_muB1.875" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.875),
+	# Nov 2: with the experiment-like readout the rings of 3+ layers count as central until
+	# they break. Single changes to the final set that should split the B core sooner:
+	# weaker B-B adhesion (energy W_BB 0.79 -> 0.72), stiffer B, more cohesive C (W_CC 0.65 -> 0.72)
+	"july_frB4.5_frC6_muB1.9_faB5.8" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_BB = 5.8),
+	"july_frB5.5_frC6_muB1.9"        => () -> variant("july"; frep_BB = 5.5, frep_CC = 6.0, mu_BB = 1.9),
+	"july_frB4.5_frC6_muB1.9_faC3.3" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_CC = 3.3),
 )
 
 """

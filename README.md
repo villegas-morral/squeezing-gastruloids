@@ -21,7 +21,8 @@ Two cell types: B (T/Bra+), which starts as a core holding 60 % of the cells, an
 The living report with the current state is
 **[reports/REPORT.md](reports/REPORT.md)**. The physics and every parameter are in
 [reports/MODEL.md](reports/MODEL.md), and how each final figure was made is in
-[reports/FIGURES.md](reports/FIGURES.md).
+[reports/FIGURES.md](reports/FIGURES.md). The key reasons behind the modelling choices are summarised in
+[reports/APPENDIX.md](reports/APPENDIX.md).
 
 **The parameter set** (`PSETS["final"]` in the notebook, Oct 8): the July/FUSION mechanics with B stiffness
 `f_rep` BB = 4.5, C stiffness `f_rep` CC = 6 and a shorter B–B adhesion range `mu` BB = 1.9 (patterns in
@@ -40,7 +41,7 @@ code-original/        the original code, as committed in f7fd270
   sotiris/            Sotiris' fusion notebook and figure (reference only)
 code-claude/          Claude's code, built on the original notebook
   squeezing-gastruloids-claude.ipynb
-  scripts/            batch runs (library exported from the notebook)
+  scripts/            batch runs (library exported from the notebook); README.md says what each one is for
   figures/            the final 3D figures, movies and the presentation PDF
     data/             the data behind every final figure (cells: x, y, z, r, cell_state)
   figures-oct7/       the same figures for the Oct 7 parameter set (kept)
@@ -50,7 +51,10 @@ reports/
   REPORT.md           living report: constraints, decisions, results
   MODEL.md            the model: equations, physics, parameters
   FIGURES.md          how each final figure was made (initial condition, procedure, data)
-  july-2026/          the July reports (superseded), with the LaTeX report in report/
+  APPENDIX.md         the key reasons behind the modelling choices (short)
+  2026-07 july/       the July reports (superseded), with the LaTeX report in report/
+  2026-10 october/    the October LaTeX report
+  2026-11 november/   the November LaTeX report (in progress)
 claude-answers/       Claude's answers, as markdown with images
 experiments/         local only, gitignored
   pattern-examples/   experimental pattern examples

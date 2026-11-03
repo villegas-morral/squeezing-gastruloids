@@ -209,8 +209,14 @@ $$
 
 With $q = 0.004667$, $\tau_B = 300$ and $\tau_C = 750$, $f_B$ falls from 0.6 to 0.2 in about 290 time units.
 
-**Time units.** The calibration of $p$ (≈ 7.1 h) and $q$ (≈ 14.1 h) gives **1 h ≈ 15 model time units**. So
-the 60 % → 20 % drop takes ≈ 19 h in the model, against 24 h (72 → 96 h) in the experiments.
+**Time units.** Oriola et al. 2026 set the time unit to $T_0 = R_0/V_0 = 4$ min ($R_0 = 5\ \mu$m, the cell
+radius; $V_0 \approx 1.25\ \mu$m/min, the instantaneous cell speed in gastruloids). So **1 h = 15 model time
+units**, the same `t_scale = 4/60` as in Sotiris' notebook. With it, $1/p \approx 7.1$ h and
+$1/q \approx 14.3$ h ($q = 0.070$ h⁻¹). The 60 % → 20 % drop takes ≈ 19 h in the model (≈ 21 h in the
+saved runs), against 24 h (72 → 96 h) in the experiments.
+
+Caveat (November 2026): measured over one 4-min frame, model cells move only about 0.05 µm/min, ~25× less
+than $V_0$. Their motion comes from divisions alone (section 7, diffusion).
 
 ---
 
@@ -274,10 +280,35 @@ the 60 % → 20 % drop takes ≈ 19 h in the model, against 24 h (72 → 96 h) i
   ≥ half of B with `fill` ≥ 0.55. `fill` is the B fraction of the cells within 0.7 × the radius that a
   compact central disc (ball, unconfined) of the current B would have.
 
-* **The phase space** groups RING and ISLANDS as **PATTERN** (a ring counts as a pattern; it breaks into
-  islands later). The outcome is read at the **readout fB = 0.2**: the first saved frame with 20 % B left,
-  ≈ 19 h after seeding, the model's 96 h. The class at fB = 0.3 and 0.12 is kept too, to show how stable the
-  outcome is.
+* **The experiment-like readout** (`exp_clusters`, `exp_polarisation`, `classify_exp`; November 2026, used
+  in the figures since then). It is the experimentalists' quantification in model units, with
+  $r = R_0 = 5\ \mu$m so that 13 µm = 2.6 r:
+  - A B (T+) cell is a *core* cell if at least 40 % of all its neighbours within 2.6 r are B.
+  - Core cells within 2.6 r are linked, directly or through other core cells.
+  - A non-core B cell joins the cluster of its nearest core cell within 2.6 r.
+  - Clusters of at least `nmin` cells are kept. The experiments use 20; the figures use 10, because our
+    aggregates are 10–100× smaller.
+  - $N_\text{eff} = 1/\sum_i p_i^2$, with $p_i$ the share of the clustered cells in cluster $i$.
+  - $P = |\mathbf r - \mathbf r_B| / R$, with $\mathbf r$, $\mathbf r_B$ the centres of mass of all cells
+    and of the B cells, and $R$ half the extent of the cells along their first principal axis (PC1).
+
+  The classes, in order:
+
+  | class | criterion |
+  |---|---|
+  | NONE | no cluster kept |
+  | POLARISED | P ≥ 0.3 |
+  | ISLANDS | N_eff ≥ 1.5 |
+  | CENTRAL | otherwise; an unbroken ring is central, as in the experiments' medium confinement |
+* **The phase space** groups RING and ISLANDS as **PATTERN** (with the October readout a ring counts as a
+  pattern; it breaks into islands later). The outcome is read at the **readout fB = 0.2**: the first saved
+  frame with 20 % B left, ≈ 19–21 h after seeding, the model's 96 h. The class at fB = 0.3 and 0.12 is kept
+  too, to show how stable the outcome is.
+* **Diffusion** (`msd_2d`, `fit_diffusion`; November 2026). The model has no noise, so cells move only
+  because neighbours divide and push and because differentiation changes the adhesion. The in-plane MSD of
+  cells is followed by id between divisions, in growing monolayers, with the growth flow removed (an affine
+  fit per lag). Fitting MSD = 4Dτ + c at 2–8 h gives D ≈ 0.004 r²/unit ≈ 1.5 µm²/h. The Damköhler number
+  is Da = q ℓ²/D: ≈ 4–8 for ℓ = one cell diameter, and 500–3800 for ℓ = the pancake radius at squeezing.
 * **Fusion assay**:
   1. Two aggregates of 150 cells each are grown and relaxed separately, each as one pure type.
   2. They are placed touching, with no division and no differentiation, for 24 h.
