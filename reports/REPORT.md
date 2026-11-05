@@ -85,6 +85,9 @@ These come from the July chat and the October 6 answers. Quotes are your words.
 | 11-03 | **Readout at fB 0.12** (`class_read`, cache `2026-11-03-read012b`), three outcomes only: read at fB 0.12 if at least half of the B cells are in clusters, else at 0.15, else at 0.2 (`read_outcome`, `READ_MIN_CL = 0.5`). Ties between seeds go to the same rule from fB 0.10. | Your comments on 07/08: the experiments read at 96 h (24 h after squeezing) with ~12 % T+; "if the B centroid completely differentiates away … just those three". Without the half-clustered rule, monolayer islands shrinking below 10 cells left one survivor that read as a B-centroid. `claude-answers/09-cleaning-up.md`. |
 | 11-03 | **Phase-space charts: n_layers on a linear axis**; three versions per readout (log10 N0, fully linear, diameter); folders `phase_space` (fB 0.12), `phase_space_fB20`, `phase_space_classic`. `GHOST = 0.5`. No titles on fig2–4. Stale charts sent to the Recycle Bin. | Your comments on 08. |
 | 11-03 | **Grid `f_att` BB {6.4, 6.1, 5.8} × τ_div {now, 13 h both}** (`grid_nov3`, seed 1, coarse map, + fusion of 6.1). | Your comments on 07: equal τ_div looked good but patterns only at low layers; 5.8 gave a poor phase space, so try less. |
+| 11-03 | **Polarisation screens of large unconfined aggregates** (`pol_nov3`, `pol2_nov3`: C-side cohesion, stiffness, `f_att` BB + CC, BC and λ × 0.5 as diagnostics) and the pole-vs-dumbbell measure "end". | Your comment that large aggregates do not polarise. `claude-answers/10-autonomous-work.md` §2. |
+| 11-04 | **Full phase spaces of three candidate sets**, on the points and seeds of `phase_D`: `phase_F` (`f_att` BB 6.1 + τ_div 13 h), `phase_G` (`f_att` BB 7.5, CC 3.6), `phase_H` (BB 7, CC 3.3). None adopted; your decision. | To compare the trade-off between polarisation and thick-slab clusters with three seeds. `claude-answers/10` §2.6, §6. |
+| 11-04 | **Plate friction 3 and 5 on the cohesive sets** (`wall_nov4`, seed 1). No effect on the 3–4-layer clusters; friction stays at 1.5. | The only confined-only parameter; tested whether it could separate the clusters from the polarisation limit. `claude-answers/10` §2.8. |
 | 11-02 | **The time unit is T0 = 4 min** (Oriola et al. 2026: T0 = R0/V0, V0 ≈ 1.25 µm/min), so 15 units = 1 h, as used since July. | The paper; your correction of the table. |
 
 ## The July work, piece by piece
@@ -574,6 +577,31 @@ Details and figures: `claude-answers/05-november-round.md`.
   - At fB 0.12: the late polarisation at 3–4 layers, N0 300–600, does not happen.
   - fB 0.2 comes about 3 h earlier (16–19 h after seeding), and the aggregates grow ×4–5 instead of ×2.3.
   - So equal and faster division hardly moves the phase space.
+
+### Stage 8b: large aggregates, and the candidate sets (2026-11-03/04)
+
+Details and figures: `claude-answers/10-autonomous-work.md` §2.
+
+- **Large unconfined aggregates polarise late, not never.** P(t) takes off later the larger N0, and B runs
+  out first above N0 ≈ 1200. Not the over-compression: stiffer cells are less compressed and polarise
+  worse.
+- **Faster mechanics help** (λ × 0.5 = every force × 2, diagnostic): a clean pole up to N0 2400.
+- **Without touching λ, stronger B and C cohesion with a gap** (W_BC < W_CC < W_BB) also helps: `f_att` BB 7.5,
+  CC 3.6 polarises up to N0 4800. If C gets nearly as cohesive as B, C–B–C dumbbells form instead of poles.
+- **The full maps put the sets on one line.** More B (+ C) cohesion moves polarisation to larger N0 and the
+  3–4-layer clusters too (unconfined polarisation: now 1200, 7 / 3.3 2400, 7.5 / 3.6 4800; 3-layer
+  clusters: 1427, 2400, 4800). `f_att` BB 6.1 + 13 h goes the other way. The polarisation limit moves but
+  stays: with 7.5 / 3.6 the time to polarise roughly doubles per doubling of N0, and N0 9600 does not
+  polarise.
+- **λ × 0.5 on top of 7.5 / 3.6** (diagnostic) halves the time to polarise at N0 4800 (11–13 h instead of
+  21–25 h; clean poles). λ × 0.5 alone gives the same coarse map as 7 / 3.3 at 29 of 31 points: one control,
+  how fast the tissue rearranges compared with differentiation, seems to set both the polarisation limit and
+  the thick-slab cluster thresholds.
+- **Plate friction** (confined only; 3 and 5 instead of 1.5 on 7.5 / 3.6 and 7 / 3.3, `wall_nov4`) does not
+  move the 3–4-layer clusters. It acts on 1–2 layers only (clusters at 2 layers from smaller N0, looser
+  monolayers). No free parameter found that separates the two sides of the trade-off.
+- **Run time** grows about ×3.3 per doubling of N0 above 2400 (N0 9600: 4.6–9.4 h per run). The ±200 r box
+  is enough up to N0 9600.
 
 ## Caveats
 

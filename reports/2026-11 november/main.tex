@@ -141,7 +141,6 @@
 
 \section*{To-Do}
 \begin{enumerate}
-    \item Connect to Windows Remote Desktop and plot the pending GLMakie figures.
     \item Check all the figures.
     \item Make a comparison table with diameter and number of cells accoutning for  some overlapping
     \item Add how we comute length in the model
@@ -577,7 +576,7 @@ The outcome is read from the positions $\mathbf{x}_i$ and states $s_i$ of the ce
     $\Delta t$ & Timestep & 0.02 & 0.02 & \cur{0.015} \\
     $ r$ & Radius & 1 & 1 & 1 \\
      & Overlap factor & 0.3 & 0.3 & 0.3 \\
-    $\alpha$ & Cell-ECM/cell-cell friction parameter & 0.9 & 0.9 & 0.9 \\
+    $\alpha$ & Cell-ECM & 0.9 & 0.9 & 0.9 \\
     $\tau_\text{div}^A$ & Average division time & 300 & 300 & \cur{--} \\
     $\tau_\text{div}^B$ & Average division time & 300 & 300 & 300 \\
     $\tau_\text{div}^C$ & Average division time & 750 & 750 & 750 \\
@@ -619,10 +618,10 @@ The outcome is read from the positions $\mathbf{x}_i$ and states $s_i$ of the ce
           & \sot{6.4} & 1.6 \\
           &   & \sot{3}
     \end{pmatrix}$ \\
-    $p$ & Fixed transition rate from $A$ to $B$ & 0.009333 & 0.009333 & \cur{--} \\
-    $q$ & Fixed transition rate from $B$ to $C$ & 0.004667 & 0.004667 & 0.004667 \\
+    $p$ & Fixed transition rate \newline from $A$ to $B$ & 0.009333 & 0.009333 & \cur{--} \\
+    $q$ & Fixed transition rate \newline from $B$ to $C$ & 0.004667 & 0.004667 & 0.004667 \\
     $K$ & Feedback parameter & 0.2 & 0.2 & \cur{--} \\
-    $\lambda_\text{wall}$ & Plate friction (cells closer than 0.05 to a plate) & -- & -- & \cur{1.5} \\
+    $\lambda_\text{wall}$ & Plate friction & -- & -- & \cur{1.5} \\
     $n_\ell$ & Number of layers &  &  &  \\
     $L$ & Plate gap & -- & -- & \cur{$2.1\,r\,n_\ell$} \\
     $\phi_B(0)$ & Initial proportion of $B$ cells & -- & -- & \cur{0.6} \\

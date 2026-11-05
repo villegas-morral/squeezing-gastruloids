@@ -86,7 +86,7 @@ function cells3d!(fig, c; view = :oblique, bs = nothing, bbox, scale = 4, ghost 
 		k = findall(w -> w <= zc + 0.2, z)
 		x, y, z, r, s = x[k], y[k], z[k], r[k], s[k]
 	end
-	bs = bs === nothing ? max(maximum(x) - minimum(x), maximum(y) - minimum(y)) / 2 + 1.5 : bs
+	bs = bs === nothing ? max(maximum(abs.(x .- xc)), maximum(abs.(y .- yc))) + 1.5 : bs   # around the centre of mass
 	w, h = round.(Int, scale .* Makie.widths(bbox))
 	g = Figure(size = (w, h), figure_padding = 0, backgroundcolor = :white)
 	ax = Axis3(g[1, 1]; aspect = :data, azimuth = view == :top ? 0.0 : -pi/2 + 0.35,

@@ -763,8 +763,8 @@ function cells_mesh!(ax, x, y, z, r, s; ghost = nothing, cmap = color_map)
 	ax
 end;
 
-"Half-width of a box that fits the aggregate in the plane, with a margin."
-box_halfwidth(c) = max(maximum(c.x) - minimum(c.x), maximum(c.y) - minimum(c.y)) / 2 + 2.0;
+"Half-width of a box around the centre of mass that holds the whole aggregate in the plane (a polarised one is off-centre), with a margin."
+box_halfwidth(c) = max(maximum(abs.(c.x .- mean(c.x))), maximum(abs.(c.y .- mean(c.y)))) + 2.0;
 
 "A panel title line: plain text, or LaTeX (text with inline \$...\$ math) when it has a \$."
 panel_text(s) = occursin('$', s) ? Makie.LaTeXString(s) : s;
@@ -790,9 +790,9 @@ view leaves out the cells above the mid-plane, so the B layout shows on the cut 
 translucent (unconfined aggregates, where B polarises; November 2026).
 
 `bs` is the half-width of the box (default: fits the aggregate); give every panel
-of a figure the same `bs` to draw them at the same scale (the box is then a cube, drawn at
-a scale that does not depend on the view). Without `bs`, a flat aggregate seen from the
-side or obliquely gets a flat box, so it fills the panel.
+of a figure the same `bs` (and the same view) to draw them at the same scale. Seen from
+the side or obliquely, the box fits the aggregate in z (always with `bs`, and without it
+when the aggregate is flat), so it fills the panel.
 
 `label`: the title, one line per "\n", each plain text or LaTeX (`panel_text`), above the axis.
 """
@@ -803,7 +803,9 @@ function draw_cells!(pos, c; view = :top, ghost = nothing, cut_top = true, label
 	bs = same_scale ? bs : box_halfwidth(c)
 	gh = ghost
 	keep = (view == :top && cut_top && gh === nothing) ? findall(w -> w <= zc + 0.2, z) : collect(eachindex(z))
-	flat = !same_scale && view != :top && maximum(z) - minimum(z) < 1.2bs
+	# seen from the side or obliquely, the box fits the aggregate in z when it is flat, and
+	# always with a shared bs (the x-y box then sets the scale, the same in every panel)
+	flat = view != :top && (same_scale || maximum(z) - minimum(z) < 1.2bs)
 	lines_ = isempty(label) ? String[] : String.(split(label, "\n"))
 	g = isempty(lines_) ? nothing : GridLayout(pos)
 	for (i, l) in enumerate(lines_)
@@ -812,7 +814,6 @@ function draw_cells!(pos, c; view = :top, ghost = nothing, cut_top = true, label
 	ax = Axis3(g === nothing ? pos : g[length(lines_) + 1, 1], aspect = :data,
 		azimuth = view == :oblique ? pi/4 : view == :front ? pi/2 : 0,
 		elevation = view == :top ? pi/2 : view == :side ? SIDE_ELEVATION : view == :front ? 2*pi + pi/32 : OBLIQUE_ELEVATION,
-		viewmode = same_scale ? :fit : :fitzoom,
 		xlabel = "", ylabel = "", zlabel = "",
 		xgridvisible = false, ygridvisible = false, zgridvisible = false,
 		xspinesvisible = false, yspinesvisible = false, zspinesvisible = false,

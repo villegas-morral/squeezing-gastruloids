@@ -151,8 +151,9 @@ function write_data()
 		end
 		r === nothing && continue
 		d = load(r); k = frame_at(d, 0.6)
-		# one view each (Nov 3): the pancake obliquely, the sphere from the front, whole with C translucent
-		push!(pans, (panel = "ic_$(CORE)_$(kind)", row = 1, col = col, views = kind == "free" ? "front" : "oblique",
+		# one view each (Nov 3), the same oblique view for both (same view + same box = same scale);
+		# the sphere whole with C translucent
+		push!(pans, (panel = "ic_$(CORE)_$(kind)", row = 1, col = col, views = "oblique",
 					 label = "", cells = cells(d, k), meta = meta(r, d, k), ghost = kind == "free"))
 	end
 	write_panels(joinpath(DATA, "fig1_initial_condition"), "", pans; same_scale = true)
@@ -164,7 +165,7 @@ function write_data()
 	fBs = (0.6, 0.45, 0.3, 0.2, 0.12)
 	rows_ = Any[]
 	i = pick(trow, "free", 0, 600; seed = 1)
-	i === nothing || push!(rows_, (trow[i], "No confinement", false))
+	i === nothing || push!(rows_, (trow[i], "No confinement", false))     # (titles: "No confinement, N_0 = 600")
 	EX["CENTRAL"] === nothing || push!(rows_, (EX["CENTRAL"], "Medium confinement", true))
 	EX["PATTERN"] === nothing || push!(rows_, (EX["PATTERN"], "Strong confinement", true))
 	for (row, (r, name, confined)) in enumerate(rows_)
@@ -172,8 +173,8 @@ function write_data()
 		for (j, f) in enumerate(fBs)
 			k = frame_at(d, f)
 			c = confined ? cells(d, k) : align_B(cells(d, k); confined = false, ref = cells(d, kend))
-			where_ = confined ? "$(lname(r["layers"])), \$N_0 = $(r["N0"])\$" : "unconfined, \$N_0 = $(r["N0"])\$"
-			lbl = (j == 1 ? "$name: $where_|" : "|") *
+			where_ = confined ? "$(lname(r["layers"])), \$N_0 = $(r["N0"])\$" : "\$N_0 = $(r["N0"])\$"
+			lbl = (j == 1 ? "$name, $where_|" : "|") *
 				  @sprintf("\$t = %.0f\$ h, \$f_B = %.2f\$%s", hrs(d, k), fB_of(d, k), f == READ_FB ? " (readout)" : "")
 			# confined: top and side views; unconfined: one view, from the front (B to the side), whole
 			push!(pans, (panel = "row$(row)_$(j)", row = row, col = j, views = confined ? "top+side" : "front",

@@ -74,15 +74,16 @@ else
 								   r.N0, r.seed, r.drift, r.type, r.D, r.D_um2h, r.slope, r.Da_cell, r.Da_R)
 	end
 	# the figure: MSD against lag time (log-log), B and C, both sizes, affine-corrected; the fits
-	fig = Figure(size = (1100, 480), fontsize = 15)
+	fig = Figure(size = (1100, 480), fontsize = 15, fonts = TEX_FONTS)
 	for (j, drift) in enumerate((:affine, :local))
-		ax = Axis(fig[1, j]; xscale = log10, yscale = log10, xlabel = "lag time (h)", ylabel = "MSD (cell radii²)",
-				  title = drift == :affine ? "growth flow removed (affine fit)" : "relative to the neighbours (5 r)")
+		ax = Axis(fig[1, j]; xscale = log10, yscale = log10, xlabel = L"\mathrm{lag\ time}\ \tau\ \mathrm{(h)}",
+				  ylabel = L"\langle |\Delta \mathbf{r}|^2 \rangle\ (r^2)",
+				  title = drift == :affine ? "growth flow removed (affine fit)" : L"\mathrm{relative\ to\ the\ neighbours}\ (5r)")
 		for f in files, (typ, col, key) in (("B", Makie.wong_colors()[3], :msd_B), ("C", Makie.wong_colors()[2], :msd_C))
 			c = curves[(f, drift)]; N0 = parse(Int, match(r"_N(\d+)_", f)[1])
 			ok = findall(>(0), getfield(c, key))
 			lines!(ax, c.tau[ok] ./ 15, getfield(c, key)[ok]; color = col, linestyle = N0 == 600 ? :dash : :solid,
-				   label = "$typ, N0 $N0")
+				   label = Makie.LaTeXString("\$$(typ)\$, \$N_0 = $(N0)\$"))
 		end
 		t = [2.0, 8.0]; lines!(ax, t, 0.3 .* t ./ 2; color = :black, linewidth = 1)   # slope 1 guide
 		text!(ax, 8.0, 1.2; text = "slope 1", fontsize = 12)

@@ -2,14 +2,14 @@
 
 Grouped by topic, not in the order of your comments. Nothing is committed.
 
-**Status (Nov 3, 15:30):**
+**Status (Nov 3, 18:30):** everything below is done.
 
-- Done: the new readout, the code changes, the report text, the beamer clean-up, the figure clean-up.
-- **The parameter grid (§2) is running**: 99 runs, a few hours.
-- **The 3D figures, the overview and the movies** need GLMakie, and your remote session is disconnected
-  again (`query session`: "Disc"; GLMakie needs a desktop session for OpenGL). They will be redrawn as soon
-  as you reconnect; a waiter is watching for it. Until then `code-claude/figures` and the report still
-  show yesterday's renders.
+- The grid results are in §2.
+- All figures, the overview and the movies were rendered with GLMakie when your session was briefly active
+  at 17:45.
+- Your comments on the November report (the figures, the table, polarisation) are answered in §10.
+- The study of why large aggregates do not polarise has started; it continues tonight in
+  `10-autonomous-work.md`.
 
 ---
 
@@ -113,7 +113,44 @@ the new readout (§1):
 - N0 150–2400, plus 4800 at 3 and 4 layers
 - the fusion assay for 6.1
 
-**Results: pending.** The six charts side by side and my reading will go here.
+### Results
+
+Seed 1, read at fB 12 % (§1), on the same coarse map (`code-claude/scripts/grid_compare.jl`; per point:
+`results/stage5/grid_nov3/compare.txt`):
+
+![grid](img/09-grid.png)
+
+Where clusters start (the first N0 from which every larger point of the map is Clusters):
+
+| | 1 layer | 2 layers | 3 layers | 4 layers | 8 layers | unconfined polarised up to |
+|---|---|---|---|---|---|---|
+| 6.4, now | 300 | 600 | 2400 | 4800 | – | 600 |
+| 6.1, now | 300 | 600 | 2400 | **2400** | – | 600 |
+| 5.8, now | 300 | 600 | **1200** | **2400** | – | 600 |
+| 6.4, 13 h | **150** | 600 | 2400 | 4800 | – | 600 |
+| **6.1, 13 h** | **150** | 600 | **1200** | **2400** | – | **1200** |
+| 5.8, 13 h | 300 | 300 | 2400 (600 too) | **2400** | – | 600 |
+
+### My reading
+
+- **Yes, the two changes add up.** The `f_att` BB change moves the thick slabs (3–4 layers) and the equal
+  division time moves the monolayers. Together, at 6.1 and 13 h, the chart is the cleanest of the six: a
+  regular staircase from N0 150 (1 layer) to 600 (2), 1200 (3) and 2400 (4 layers), with no isolated points.
+  Its unconfined row also polarises one step further, up to 1200.
+- **Reducing B–B cohesion less works.** 6.1 gives the same 4-layer threshold as 5.8. 5.8 has isolated
+  cluster points among central or polarised ones: 4 layers at N0 300 (now), and with 13 h 2 layers at
+  N0 300 and 3 layers at N0 600. That is the "not such a nice phase space" you saw, and 6.1 with 13 h has
+  none. (6.1 with the current τ has one, 2 layers at N0 150.) So 5.8 overshoots.
+- **The fusion assay of 6.1 is fine:** BB 0.54, CC 0.56, BC 0.91, the same as now.
+- **Caveats:**
+  - One seed on a coarse map: single points can flip.
+  - None of the six makes unconfined N0 2400 polarise. That is a separate problem (your report comment,
+    §10).
+
+**Proposal:** `f_att` BB 6.1 with τ_div = 13 h for B and C is the candidate for the definitive set, if the
+polarisation study (`10-autonomous-work.md`) does not change the picture. Before adopting it I would run its
+full phase space (3 seeds, the refined points; about 4 h). I have not started that: it is your call, and it
+should include whatever fixes large-aggregate polarisation.
 
 ---
 
@@ -427,3 +464,150 @@ directly (§3).
   9.3 are textbook background, cited from memory and not looked up for this answer. If the report should
   cite them, I would look up the exact references first (Steinberg's differential adhesion papers; Torza &
   Mason 1970 on three-phase drops).
+
+---
+
+## 10. Your comments on the November report
+
+### Figures (all redrawn, copied into the report)
+
+> figures/fig1_initial_condition.png now this has 4 figures. i want just the one for the sphere and one for
+> the pancake. the pancake should be the diagonal view … showing the top a little bit more
+
+**fig1** now has one panel each. The pancake is seen obliquely at 45° (was 36°, `OBLIQUE_ELEVATION`), so the
+top shows more. The sphere is drawn from the same oblique view: a sphere looks the same from any side, and
+with the same view and box both are drawn at the same scale.
+
+> all figures should use latex font
+
+All of them now use LaTeX's Computer Modern (`TEX_FONTS`), with math in the titles ($N_0$, $f_B$, $P$,
+$N_\mathrm{eff}$):
+
+- the report figures
+- the phase-space charts
+- the overview
+- the movies
+- the MSD figure
+
+Sizes are unchanged, so the figures may look slightly different in the report.
+
+> fig5_fusion … two rows, one with the two aggregates placed for fusion and then a latex arrow pointing down
+> and below the outcome of the fused aggregate … three figures one for each fusion
+
+**fig5** now has three columns (BB, CC, BC). Each has the two aggregates as placed for the assay, a LaTeX ↓,
+and the doublet after 24 h.
+
+For this I made the assay also save its starting doublets and reran it for the current set. The numbers
+are unchanged: BB 0.54, CC 0.56, BC 0.91.
+
+> fig4_unconfined: drop the main title. for the figure titles, just write N_0 = ...; P = ... \\ t = 24 h.
+> leave only one view in the unconfined case … the pole going to the side. two views only in the confined case
+
+**Done.**
+
+- **Every unconfined panel now has one view:** from the front, with the aggregate rotated so that B points
+  to the side. This applies to fig4, fig1's sphere and fig2's top row.
+- **Confined panels keep their two views.**
+- **fig4's titles** read "$N_0 = …$; $P = …$" over "$t = …$ h".
+
+**About "t = 24 h".** The panels are the readout frames, the first frame with 12 % B. That frame comes at
+25–32 h after the start of differentiation, depending on the aggregate, so I wrote each panel's own time.
+If you prefer, I can show all five at exactly t = 24 h instead. They would then not all be at the readout,
+and P would differ slightly from the phase space.
+
+> behaviours fig: the side view takes up lots of unnecessary vertical space … a little bit more tilted …
+> drop the main title
+
+**fig2:**
+
+- **The side view is tilted 20°** (`SIDE_ELEVATION`; was 6°), so some of the top shows.
+- **Its box fits the slab**, so it fills the width of the panel, and its row is about half the height of
+  the top-view row.
+- **No main title.** Its row titles read "No confinement, $N_0 = 600$" and so on.
+
+The same tilt is used for every side view: the phase-space insets and the movies.
+
+> fig3_patterns: remove big title. fig titles only be like "1 layer, $N_0$=100"
+
+**Done.**
+
+### Parameter table
+
+> make sure the middle table is sotiris fusion, maybe they are july
+
+**You were right: it was not.** The middle column held the values from the July report's table:
+
+- μ: 1.55, 1.5, 1.525, …
+- F_att: 6, 6, 2.4, …
+
+The note below the table had a third set ("F_rep BB 3, CC 5.1"), which is our July *variant*.
+
+Sotiris' fusion set is the "FUSION PARAMETERS" block of your laptop notebook
+(`archive/code-original/july-laptop/squeezing-gastruloids.ipynb`), identical to `PSETS["fusion"]` in our
+code:
+
+$$\mu = 2\begin{pmatrix}1&0.91&1\\0.91&1&1\\1&1&1.07\end{pmatrix},\quad
+F_\mathrm{att} = 4\begin{pmatrix}0.9&1&0.6\\1&1.6&0.4\\0.6&0.4&0.75\end{pmatrix},\quad
+F_\mathrm{rep} = 3\begin{pmatrix}3&1&1\\1&2&1\\1&1&2\end{pmatrix}.$$
+
+The table now shows this set.
+
+**What changed in the table:**
+
+- **Colours:**
+  - dark green: Sotiris differs from DO; also used in Current where Current keeps Sotiris' value
+  - dark blue: Current differs from Sotiris
+- **The note on the old values is gone.**
+- **Rows removed:** division relaxation, time units per hour, plates, readout.
+- **The typical scales (T₀, R₀, F₀) are above the rows with no values.**
+- **The Current column has no remarks in parentheses.**
+
+**What the colours show.** Most of Current is Sotiris':
+
+- F_att BB 6.4 and CC 3, μ_CC 2.14 and F_rep CC 6 are his (green).
+- Our own changes (blue) are only:
+  - μ_BB 1.9
+  - F_rep BB 4.5 (his 6)
+  - Δt 0.015
+  - dropping A, p and K
+  - the plates: λ_wall, L, φ_B⁰
+
+**One thing I could not check.** In the Sotiris column, the rows other than μ, F_att, F_rep and F₀ (Δt, α,
+τ_div, σ_div, λ, p, q, K, T₀) still come from the July table. The fusion assay has no division or
+differentiation, so τ_div, p, q and K do not enter it at all.
+
+### Large aggregates do not polarise
+
+> i think it's a problem that large aggregates do not polarise since we aim to plot larger aggregates. you
+> can take your time to study this
+
+Started; the full study is in `10-autonomous-work.md`. The first finding:
+
+![P over time](img/10-polarisation-time.png)
+
+Polarisation is a delayed take-off, and the delay grows steeply with size:
+
+| N0 | P crosses 0.3 at |
+|---|---|
+| 150–600 | 8–13 h |
+| 849 | 16–18 h |
+| 1200 | 19–21 h (2 of 3 seeds) |
+| 2400 | not before B runs out (P 0.1 at the end) |
+| 4800 | not before B runs out (P 0.02 at the end) |
+
+**What does not help** (all checked):
+
+- weaker B–B cohesion (`f_att` BB 6.1, 5.8)
+- equal division times
+- both together
+
+**Why, I think.** For B to break out of its C shell, the energy gained per unit of contact area is
+σ_C + γ_BC − σ_B = W_CC − W_BC, which has no W_BB in it (§9). So the lever should be on the C side. A screen
+of C-side changes (C–C attraction and range, and C and B stiffness) is running, at N0 600–4800. Results in
+10.
+
+### Other
+
+- **`main.pdf` could not be rebuilt at 17:50:** the file was locked, probably open in a PDF viewer. All new
+  figures are in `figures/`, so your next build picks them up.
+- **Your To-Do list in the report:** I removed only item 1 (plot the pending GLMakie figures), which is done.

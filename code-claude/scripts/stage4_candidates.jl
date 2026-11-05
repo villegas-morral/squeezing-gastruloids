@@ -6,7 +6,7 @@
 # "name@w0.1" means candidate `name` with a diluted B core (initialize_diff! width 0.1).
 
 function variant(base; frep_BB = nothing, frep_CC = nothing, fatt_BB = nothing,
-		fatt_CC = nothing, mu_BB = nothing, mu_CC = nothing)
+		fatt_CC = nothing, mu_BB = nothing, mu_CC = nothing, fatt_BC = nothing)
 	P = PSETS[base]
 	mu = float.(copy(P.mu)); fa = float.(copy(P.f_att)); fr = float.(copy(P.f_rep))
 	frep_BB === nothing || (fr[2,2] = frep_BB)
@@ -15,7 +15,10 @@ function variant(base; frep_BB = nothing, frep_CC = nothing, fatt_BB = nothing,
 	fatt_CC === nothing || (fa[3,3] = fatt_CC)
 	mu_BB   === nothing || (mu[2,2] = mu_BB)
 	mu_CC   === nothing || (mu[3,3] = mu_CC)
-	@assert fa[2,3] == 1.6 && fr[2,3] == 3.0 && mu[2,3] == 2.0 "BC entries must stay frozen"
+	# the BC entries stay frozen; fatt_BC is only for diagnostics (Nov 3: what sets the speed of
+	# polarisation), never for a set that is used
+	fatt_BC === nothing || (fa[2,3] = fa[3,2] = fatt_BC)
+	@assert (fatt_BC !== nothing || fa[2,3] == 1.6) && fr[2,3] == 3.0 && mu[2,3] == 2.0 "BC entries must stay frozen"
 	(mu = mu, f_att = fa, f_rep = fr)
 end
 
@@ -58,6 +61,26 @@ const CANDIDATES = Dict(
 	# weaker B-B adhesion (energy W_BB 0.79 -> 0.72), stiffer B, more cohesive C (W_CC 0.65 -> 0.72)
 	"july_frB4.5_frC6_muB1.9_faB5.8" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_BB = 5.8),
 	"july_frB4.5_frC6_muB1.9_faB6.1" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_BB = 6.1),   # Nov 3: half-way to 5.8
+	# Nov 3 polarisation screen (large unconfined aggregates polarise too late): the C side, whose
+	# cohesion sets the push of B out of its C shell (W_CC - W_BC), and the stiffness of B and C
+	"july_frB4.5_frC6_muB1.9_faC3.6" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_CC = 3.6),
+	"july_frB4.5_frC6_muB1.9_faC4.2" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_CC = 4.2),
+	"july_frB4.5_frC6_muB1.9_faC2.4" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_CC = 2.4),
+	"july_frB4.5_frC6_muB1.9_muC2.3" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, mu_CC = 2.3),
+	"july_frB4.5_frC4.5_muB1.9"      => () -> variant("july"; frep_BB = 4.5, frep_CC = 4.5, mu_BB = 1.9),
+	"july_frB3_frC6_muB1.9"          => () -> variant("july"; frep_BB = 3.0, frep_CC = 6.0, mu_BB = 1.9),
+	# stiffer cells: large aggregates are over-compressed (centres ~1 r apart, 40+ overlapping neighbours)
+	"july_frB6_frC6_muB1.9"          => () -> variant("july"; frep_BB = 6.0, frep_CC = 6.0, mu_BB = 1.9),
+	"july_frB4.5_frC9_muB1.9"        => () -> variant("july"; frep_BB = 4.5, frep_CC = 9.0, mu_BB = 1.9),
+	"july_frB6.75_frC9_muB1.9"       => () -> variant("july"; frep_BB = 6.75, frep_CC = 9.0, mu_BB = 1.9),
+	# Nov 3, second polarisation screen. Stronger C made C-B-C dumbbells (C as cohesive as B), so:
+	# B and C both more cohesive, B kept above C; and, as a diagnostic only, a weaker BC attraction
+	"july_frB4.5_frC6_muB1.9_faB7.5_faC3.6" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_BB = 7.5, fatt_CC = 3.6),
+	"july_frB4.5_frC6_muB1.9_faB8.5_faC4.2" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_BB = 8.5, fatt_CC = 4.2),
+	# Nov 3, night: 7.5/3.6 gave a real pole up to N0 2400; its confined map, and the half-way set
+	"july_frB4.5_frC6_muB1.9_faB7_faC3.3" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_BB = 7.0, fatt_CC = 3.3),
+	"diag_BC1.2"                     => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_BC = 1.2),
+	"diag_BC0.8"                     => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_BC = 0.8),
 	"july_frB5.5_frC6_muB1.9"        => () -> variant("july"; frep_BB = 5.5, frep_CC = 6.0, mu_BB = 1.9),
 	"july_frB4.5_frC6_muB1.9_faC3.3" => () -> variant("july"; frep_BB = 4.5, frep_CC = 6.0, mu_BB = 1.9, fatt_CC = 3.3),
 )

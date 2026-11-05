@@ -22,11 +22,29 @@ needed to redo that history; **july** = left over from July, not used by anythin
 | `stage7_presentation.jl` | core | the overview figure (`figures/presentation.pdf`) |
 | `stage4_candidates.jl` | core | the named parameter sets (`stage5_run.jl` needs it) |
 | `msd_monolayer.jl` | core | November: monolayer runs with one frame per 4 min, MSD, diffusion coefficient, Damköhler number |
-| `tdiv_report.jl` | sweep | November test: 13 h division for B and C against the final runs |
+| `grid_compare.jl` | study | Nov 3: the f_att BB × τ_div grid, six phase spaces (claude-answers/09 §2) |
+| `polarisation_time.jl` | study | Nov 3: P(t) of unconfined runs by size (why large aggregates do not polarise; claude-answers/10) |
+| `pol_screen.jl` | study | Nov 3: the polarisation screens (pol_nov3, pol2_nov3): time to P 0.3, P and pole-vs-dumbbell at fB 0.12, fusion (claude-answers/10 §2.4) |
+| `pol_large.jl` | study | Nov 4: the large unconfined runs of the candidate sets and λ × 0.5: time to P 0.3, P, "end", and the readout frames as slices (claude-answers/10 §2.7) |
+| `pol_shapes.jl` | study | Nov 3: mid-plane cross-sections of the screen's unconfined runs at fB 0.12 (pole vs dumbbell; claude-answers/10 §2.4) |
+| `wall_compare.jl` | study | Nov 4: plate friction 3 and 5 on the cohesive sets (wall_nov4) against friction 1.5, per point, + readout frames (claude-answers/10 §2.8) |
+| `grid_compare_b.jl` | study | Nov 3 night: do the sets that polarise large aggregates keep the confined patterns? six coarse phase spaces, seed 1 (claude-answers/10 §2.5) |
+| `phase_compare.jl` | study | Nov 4: full phase spaces (3 seeds) of the candidate sets (phase_F, G, H) next to now's, on the same points (claude-answers/10 §2.6) |
+| `size_table.jl` | study | Nov 3: aggregate diameter against N0, sphere and pancakes (claude-answers/10 §3) |
+
+### `archive/` (moved there on Nov 3)
+
+Not used by anything current; kept to redo that history. Every path in them was rewritten to point one
+level up (`@__DIR__` → `joinpath(@__DIR__, "..")`), so they still run from `archive/`.
+
+| file | tag | what it does |
+|---|---|---|
+| `tdiv_report.jl`, `tdiv_phase.jl` | sweep | November: 13 h division for B and C against the final runs; its phase-space sketch (answer 07) |
+| `phaseE_compare.jl` | sweep | November: the f_att BB 5.8 phase space against the final one (answer 07 §8) |
 | `stage2_ic.jl`, `stage2_walls.jl`, `stage2_wall_figs.jl` | sweep | October stage 2: initial condition and plate models |
 | `stage4_screen.jl`, `stage4_gallery.jl`, `stage4_minimap.jl` | sweep | October stage 4: parameter screen and its galleries |
 | `stage5_tune_report.jl`, `stage5_answer_figs.jl` | sweep | October stage 5a: tuning summary and the figures of claude-answers/03 |
-| `make_figures.jl`, `run_phase_map.jl`, `run_checks.jl`, `probe_stability.jl` | july | the July pipeline (A/B/C model, island verdicts); copies are also in `../july-2026/scripts/` |
+| `make_figures.jl`, `run_phase_map.jl`, `run_checks.jl`, `probe_stability.jl` | july | the July pipeline (A/B/C model, island verdicts); older copies in `../../../archive/code-july-2026/scripts/` |
 
 ## The final cleanup (when the results are definitive)
 
